@@ -8,6 +8,14 @@ function parsePort(rawValue: string | undefined, fallback: number): number {
   return parsed;
 }
 
+function parseBool(rawValue: string | undefined, fallback: boolean): boolean {
+  if (rawValue === undefined) return fallback;
+  const value = rawValue.trim().toLowerCase();
+  if (value === '1' || value === 'true' || value === 'yes' || value === 'on') return true;
+  if (value === '0' || value === 'false' || value === 'no' || value === 'off') return false;
+  return fallback;
+}
+
 export const env = {
   port: parsePort(process.env.PORT, 4000),
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-this',
@@ -15,4 +23,14 @@ export const env = {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
+  mysqlHost: (process.env.MYSQL_HOST || '127.0.0.1').trim(),
+  mysqlPort: parsePort(process.env.MYSQL_PORT, 3306),
+  mysqlUser: (process.env.MYSQL_USER || 'root').trim(),
+  mysqlPassword: process.env.MYSQL_PASSWORD || '',
+  mysqlDatabase: (process.env.MYSQL_DATABASE || 'agendapro').trim(),
+  mysqlTenantDbPrefix: (process.env.MYSQL_TENANT_DB_PREFIX || 'agendapro_tenant_').trim(),
+  mysqlConnectionLimit: parsePort(process.env.MYSQL_CONNECTION_LIMIT, 10),
+  mysqlAutoMigrateFromSqlite: parseBool(process.env.MYSQL_AUTO_MIGRATE_FROM_SQLITE, true),
+  sqliteControlDbPath: (process.env.SQLITE_CONTROL_DB_PATH || 'storage/control.db').trim(),
+  sqliteTenantsDbDir: (process.env.SQLITE_TENANTS_DB_DIR || 'storage/tenants').trim(),
 };

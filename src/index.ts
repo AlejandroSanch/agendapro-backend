@@ -1,6 +1,8 @@
 import cors from 'cors';
 import express from 'express';
 import { env } from './config/env';
+import { initializeStore } from './data/store';
+import { appointmentsRouter } from './routes/appointments.routes';
 import { authRouter } from './routes/auth.routes';
 import { catalogRouter } from './routes/catalog.routes';
 import { healthRouter } from './routes/health.routes';
@@ -30,6 +32,7 @@ app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/catalog', catalogRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/appointments', appointmentsRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof Error && err.message.startsWith('CORS blocked')) {
@@ -39,6 +42,17 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: 'Error interno del servidor.' });
 });
 
-app.listen(env.port, () => {
-  console.log(`AgendaPro backend listening on http://localhost:${env.port}`);
-});
+async function bootstrap(): Promise<void> {
+  try {
+    await initializeStore();
+    app.listen(env.port, () => {
+      console.log(`AgendaPro backend listening on http://localhost:${env.port}`);
+    });
+  } catch (error) {
+    console.error('No se pudo inicializar la base de datos MySQL.');
+    console.error(error);
+    process.exit(1);
+  }
+}
+
+void bootstrap();

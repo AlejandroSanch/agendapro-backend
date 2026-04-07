@@ -14,7 +14,7 @@ catalogRouter.get('/modules', (_req, res) => {
   res.json({ modules: ALL_MODULES });
 });
 
-catalogRouter.get('/active-modules', requireAuth, (req, res) => {
+catalogRouter.get('/active-modules', requireAuth, async (req, res) => {
   const user = req.user;
   if (!user) {
     res.status(401).json({ error: 'No autorizado.' });
@@ -22,7 +22,7 @@ catalogRouter.get('/active-modules', requireAuth, (req, res) => {
   }
 
   const planModules = getPlanModules(user.plan);
-  const overrides = getModuleOverrides(user.id);
+  const overrides = await getModuleOverrides(user.id);
 
   const activeModules = ALL_MODULES.map((module) => module.id as ModuleId).filter((moduleId) => {
     if (overrides[moduleId] === true) return true;

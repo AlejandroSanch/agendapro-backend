@@ -1,4 +1,4 @@
-import { AppModule, ModuleId, Plan } from '../types';
+import { AppModule, ModuleId, Plan, PlanId } from '../types';
 
 export const PLANS: Plan[] = [
   {
@@ -145,6 +145,6 @@ export const ALL_MODULES: AppModule[] = [
   },
 ];
 
-export function getPlanModules(planId: string): ModuleId[] {
+export function getPlanModules(planId: PlanId): ModuleId[] {
   return PLANS.find((plan) => plan.id === planId)?.modules ?? [];
 }
