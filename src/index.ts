@@ -6,7 +6,10 @@ import { appointmentsRouter } from './routes/appointments.routes';
 import { authRouter } from './routes/auth.routes';
 import { catalogRouter } from './routes/catalog.routes';
 import { healthRouter } from './routes/health.routes';
+import { servicesRouter } from './routes/services.routes';
 import { usersRouter } from './routes/users.routes';
+import { onboardingRouter } from './routes/onboarding.routes';
+
 
 const app = express();
 
@@ -33,6 +36,8 @@ app.use('/api/auth', authRouter);
 app.use('/api/catalog', catalogRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/appointments', appointmentsRouter);
+app.use('/api/services', servicesRouter);
+app.use('/api/onboarding', onboardingRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof Error && err.message.startsWith('CORS blocked')) {

@@ -17,6 +17,7 @@ export interface UserPublic {
   id: string;
   name: string;
   email: string;
+  emailVerified: boolean;
   plan: PlanId;
   businessName: string;
   avatarInitials?: string;
@@ -24,6 +25,8 @@ export interface UserPublic {
 
 export interface UserRecord extends UserPublic {
   password: string;
+  emailVerificationToken?: string;
+  termsAcceptedAt?: string;
   moduleOverrides: Partial<Record<ModuleId, boolean>>;
 }
 

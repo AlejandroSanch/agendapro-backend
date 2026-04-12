@@ -10,6 +10,7 @@ interface CreateUserInput {
   password: string;
   name: string;
   businessName: string;
+  acceptTerms: boolean;
   plan?: PlanId;
 }
 
@@ -18,6 +19,9 @@ interface UserRow extends RowDataPacket {
   name: string;
   email: string;
   password: string;
+  email_verified: number;
+  email_verification_token: string | null;
+  terms_accepted_at: string | null;
   plan: string;
   business_name: string;
   avatar_initials: string | null;
@@ -69,6 +73,17 @@ interface AppointmentJoinedRow extends RowDataPacket {
   service_price_cents: number;
 }
 
+interface TenantServiceRow extends RowDataPacket {
+  id: string;
+  name: string;
+  category: string;
+  description: string | null;
+  duration_minutes: number;
+  price_cents: number;
+  display_order: number;
+  is_active: number;
+}
+
 export interface AppointmentRecord {
   id: string;
   customerName: string;
@@ -95,6 +110,29 @@ export interface UpsertAppointmentInput {
 }
 
 export type UpdateAppointmentInput = Partial<UpsertAppointmentInput>;
+
+export interface ServiceRecord {
+  id: string;
+  name: string;
+  category: string;
+  durationMin: number;
+  priceCents: number;
+  description: string;
+  isActive: boolean;
+  displayOrder: number;
+}
+
+export interface CreateServiceInput {
+  name: string;
+  category?: string;
+  durationMin: number;
+  priceCents: number;
+  description?: string;
+  isActive?: boolean;
+  displayOrder?: number;
+}
+
+export type UpdateServiceInput = Partial<CreateServiceInput>;
 
 const SALT_ROUNDS = 10;
 
@@ -129,7 +167,18 @@ export async function findUserByEmail(email: string): Promise<UserRecord | undef
   const db = getControlPool();
   const [rows] = await db.query<UserRow[]>(
     `
-      SELECT id, name, email, password, plan, business_name, avatar_initials, tenant_db_name
+      SELECT
+        id,
+        name,
+        email,
+        password,
+        email_verified,
+        email_verification_token,
+        terms_accepted_at,
+        plan,
+        business_name,
+        avatar_initials,
+        tenant_db_name
       FROM users
       WHERE email = ?
       LIMIT 1
@@ -147,7 +196,18 @@ export async function findUserById(id: string): Promise<UserRecord | undefined> 
   const db = getControlPool();
   const [rows] = await db.query<UserRow[]>(
     `
-      SELECT id, name, email, password, plan, business_name, avatar_initials, tenant_db_name
+      SELECT
+        id,
+        name,
+        email,
+        password,
+        email_verified,
+        email_verification_token,
+        terms_accepted_at,
+        plan,
+        business_name,
+        avatar_initials,
+        tenant_db_name
       FROM users
       WHERE id = ?
       LIMIT 1
@@ -164,12 +224,17 @@ export async function findUserById(id: string): Promise<UserRecord | undefined> 
 export async function createUser(input: CreateUserInput): Promise<UserRecord | null> {
   const db = getControlPool();
 
+  if (!input.acceptTerms) {
+    return null;
+  }
+
   const email = normalizeEmail(input.email);
   const name = input.name.trim();
   const businessName = input.businessName.trim();
   const normalizedPlan = normalizePlan(input.plan ?? 'starter');
   const passwordHash = hashPassword(input.password);
   const avatarInitials = initialsFromName(name);
+  const emailVerificationToken = generateEmailVerificationToken();
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const userId = await nextSequentialId(db, 'users', 'user');
@@ -180,6 +245,9 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord | n
       name,
       email,
       password: passwordHash,
+      emailVerified: false,
+      emailVerificationToken,
+      termsAcceptedAt: new Date().toISOString(),
       plan: normalizedPlan,
       businessName,
       avatarInitials,
@@ -194,6 +262,9 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord | n
             name,
             email,
             password,
+            email_verified,
+            email_verification_token,
+            terms_accepted_at,
             plan,
             business_name,
             avatar_initials,
@@ -201,13 +272,15 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord | n
             created_at,
             updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+          VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, NOW(), NOW())
         `,
         [
           user.id,
           user.name,
           user.email,
           user.password,
+          user.emailVerified ? 1 : 0,
+          user.emailVerificationToken ?? null,
           user.plan,
           user.businessName,
           user.avatarInitials ?? null,
@@ -227,6 +300,97 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord | n
 
   throw new Error('No se pudo generar un id de usuario unico tras varios intentos.');
 }
+
+export async function verifyUserEmailByToken(token: string): Promise<UserRecord | null> {
+  const db = getControlPool();
+  const normalizedToken = String(token || '').trim();
+  if (!normalizedToken) return null;
+
+  const [existingRows] = await db.query<UserRow[]>(
+    `
+      SELECT
+        id,
+        name,
+        email,
+        password,
+        email_verified,
+        email_verification_token,
+        terms_accepted_at,
+        plan,
+        business_name,
+        avatar_initials,
+        tenant_db_name
+      FROM users
+      WHERE email_verification_token = ?
+      LIMIT 1
+    `,
+    [normalizedToken]
+  );
+
+  const existing = existingRows[0];
+  if (!existing) return null;
+
+  const [result] = await db.query<ResultSetHeader>(
+    `
+      UPDATE users
+      SET email_verified = 1,
+          email_verification_token = NULL,
+          updated_at = NOW()
+      WHERE email_verification_token = ?
+      LIMIT 1
+    `,
+    [normalizedToken]
+  );
+
+  if (!result.affectedRows) return null;
+
+  const row = await findUserById(existing.id);
+  if (!row) return null;
+  return row;
+}
+
+export async function refreshEmailVerificationTokenByEmail(email: string): Promise<string | null> {
+  const db = getControlPool();
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  const [rows] = await db.query<UserRow[]>(
+    `
+      SELECT
+        id,
+        name,
+        email,
+        password,
+        email_verified,
+        email_verification_token,
+        terms_accepted_at,
+        plan,
+        business_name,
+        avatar_initials,
+        tenant_db_name
+      FROM users
+      WHERE email = ?
+      LIMIT 1
+    `,
+    [normalizedEmail]
+  );
+
+  const row = rows[0];
+  if (!row || row.email_verified === 1) return null;
+
+  const nextToken = generateEmailVerificationToken();
+  await db.query(
+    `
+      UPDATE users
+      SET email_verification_token = ?,
+          updated_at = NOW()
+      WHERE id = ?
+    `,
+    [nextToken, row.id]
+  );
+
+  return nextToken;
+}
 export function verifyPassword(user: UserRecord, password: string): boolean {
   if (isPasswordHash(user.password)) {
     return compareSync(password, user.password);
@@ -240,6 +404,7 @@ export function sanitizeUser(user: UserRecord): UserPublic {
     id: user.id,
     name: user.name,
     email: user.email,
+    emailVerified: user.emailVerified,
     plan: user.plan,
     businessName: user.businessName,
     avatarInitials: user.avatarInitials,
@@ -322,6 +487,141 @@ export async function setUserPlan(userId: string, plan: PlanId): Promise<UserPub
   const updated = await findUserById(userId);
   if (!updated) return null;
   return sanitizeUser(updated);
+}
+
+export async function listServices(userId: string): Promise<ServiceRecord[]> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return [];
+
+  const db = getControlPool();
+  const [rows] = await db.query<TenantServiceRow[]>(
+    `
+      SELECT id, name, category, description, duration_minutes, price_cents, display_order, is_active
+      FROM ${q(tenantDbName)}.services
+      ORDER BY display_order ASC, name ASC
+    `
+  );
+
+  return rows.map(toServiceRecord);
+}
+
+export async function createService(
+  userId: string,
+  input: CreateServiceInput
+): Promise<ServiceRecord | null> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return null;
+
+  const db = getControlPool();
+  const normalized = normalizeCreateServiceInput(input);
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+    const displayOrder =
+      normalized.displayOrder === undefined
+        ? await getNextServiceDisplayOrder(connection, tenantDbName)
+        : normalized.displayOrder;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const serviceId = `svc_${randomUUID()}`;
+
+      try {
+        await connection.query(
+          `
+            INSERT INTO ${q(tenantDbName)}.services (
+              id, name, category, description, duration_minutes, price_cents, display_order, is_active, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+          `,
+          [
+            serviceId,
+            normalized.name,
+            normalized.category,
+            normalized.description || null,
+            normalized.durationMin,
+            normalized.priceCents,
+            displayOrder,
+            normalized.isActive ? 1 : 0,
+          ]
+        );
+
+        await connection.commit();
+        return getServiceById(tenantDbName, serviceId);
+      } catch (error) {
+        if (isDuplicateKeyError(error) && isPrimaryKeyDuplicateError(error)) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new Error('No se pudo generar un id de servicio unico tras varios intentos.');
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function updateService(
+  userId: string,
+  serviceId: string,
+  input: UpdateServiceInput
+): Promise<ServiceRecord | null> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return null;
+
+  const current = await getServiceById(tenantDbName, serviceId);
+  if (!current) return null;
+
+  const normalized = normalizeUpdateServiceInput(input, current);
+  const db = getControlPool();
+
+  const [result] = await db.query<ResultSetHeader>(
+    `
+      UPDATE ${q(tenantDbName)}.services
+      SET name = ?,
+          category = ?,
+          description = ?,
+          duration_minutes = ?,
+          price_cents = ?,
+          display_order = ?,
+          is_active = ?,
+          updated_at = NOW()
+      WHERE id = ?
+    `,
+    [
+      normalized.name,
+      normalized.category,
+      normalized.description || null,
+      normalized.durationMin,
+      normalized.priceCents,
+      normalized.displayOrder,
+      normalized.isActive ? 1 : 0,
+      serviceId,
+    ]
+  );
+
+  if (!result.affectedRows) return null;
+  return getServiceById(tenantDbName, serviceId);
+}
+
+export async function deleteService(userId: string, serviceId: string): Promise<boolean> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return false;
+
+  const db = getControlPool();
+  const [result] = await db.query<ResultSetHeader>(
+    `
+      DELETE FROM ${q(tenantDbName)}.services
+      WHERE id = ?
+    `,
+    [serviceId]
+  );
+
+  return result.affectedRows > 0;
 }
 
 export async function listAppointments(
@@ -547,6 +847,41 @@ async function getAppointmentById(
   return toAppointmentRecord(row);
 }
 
+async function getServiceById(
+  tenantDbName: string,
+  serviceId: string
+): Promise<ServiceRecord | null> {
+  const db = getControlPool();
+  const [rows] = await db.query<TenantServiceRow[]>(
+    `
+      SELECT id, name, category, description, duration_minutes, price_cents, display_order, is_active
+      FROM ${q(tenantDbName)}.services
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [serviceId]
+  );
+
+  const row = rows[0];
+  if (!row) return null;
+  return toServiceRecord(row);
+}
+
+async function getNextServiceDisplayOrder(
+  connection: PoolConnection,
+  tenantDbName: string
+): Promise<number> {
+  const [rows] = await connection.query<MaxIdRow[]>(
+    `
+      SELECT COALESCE(MAX(display_order), 0) AS max_value
+      FROM ${q(tenantDbName)}.services
+    `
+  );
+
+  const maxValue = Number(rows[0]?.max_value ?? 0);
+  return Number.isFinite(maxValue) ? maxValue + 1 : 1;
+}
+
 async function ensureCustomer(
   connection: PoolConnection,
   tenantDbName: string,
@@ -693,6 +1028,9 @@ async function ensureControlSchema(): Promise<void> {
       name VARCHAR(255) NOT NULL,
       email VARCHAR(255) NOT NULL UNIQUE,
       password VARCHAR(255) NOT NULL,
+      email_verified TINYINT(1) NOT NULL DEFAULT 0,
+      email_verification_token VARCHAR(128) NULL,
+      terms_accepted_at DATETIME NULL,
       plan ENUM('starter','pro','enterprise') NOT NULL,
       business_name VARCHAR(255) NOT NULL,
       avatar_initials VARCHAR(16) NULL,
@@ -708,6 +1046,45 @@ async function ensureControlSchema(): Promise<void> {
     if ((error as { code?: string })?.code !== 'ER_DUP_FIELDNAME') {
       throw error;
     }
+  }
+
+  try {
+    await db.query(`ALTER TABLE users ADD COLUMN email_verified TINYINT(1) NOT NULL DEFAULT 0`);
+  } catch (error) {
+    if ((error as { code?: string })?.code !== 'ER_DUP_FIELDNAME') {
+      throw error;
+    }
+  }
+
+  try {
+    await db.query(`ALTER TABLE users ADD COLUMN email_verification_token VARCHAR(128) NULL`);
+  } catch (error) {
+    if ((error as { code?: string })?.code !== 'ER_DUP_FIELDNAME') {
+      throw error;
+    }
+  }
+
+  try {
+    await db.query(`ALTER TABLE users ADD COLUMN terms_accepted_at DATETIME NULL`);
+  } catch (error) {
+    if ((error as { code?: string })?.code !== 'ER_DUP_FIELDNAME') {
+      throw error;
+    }
+  }
+
+  try {
+    await db.query(`CREATE UNIQUE INDEX idx_users_email_verification_token ON users (email_verification_token)`);
+  } catch (error) {
+    if ((error as { code?: string })?.code !== 'ER_DUP_KEYNAME') {
+      throw error;
+    }
+  }
+
+  // onboarding_completed column
+  try {
+    await db.query(`ALTER TABLE users ADD COLUMN onboarding_completed TINYINT(1) NOT NULL DEFAULT 0`);
+  } catch (error) {
+    if ((error as { code?: string })?.code !== 'ER_DUP_FIELDNAME') throw error;
   }
 
   await db.query(`
@@ -819,9 +1196,21 @@ async function ensureDemoUserIfNeeded(): Promise<void> {
   await db.query(
     `
       INSERT INTO users (
-        id, name, email, password, plan, business_name, avatar_initials, tenant_db_name, created_at, updated_at
+        id,
+        name,
+        email,
+        password,
+        email_verified,
+        email_verification_token,
+        terms_accepted_at,
+        plan,
+        business_name,
+        avatar_initials,
+        tenant_db_name,
+        created_at,
+        updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      VALUES (?, ?, ?, ?, 1, NULL, NOW(), ?, ?, ?, ?, NOW(), NOW())
     `,
     [
       demoId,
@@ -897,15 +1286,57 @@ async function ensureTenantSchema(tenantDbName: string): Promise<void> {
       CREATE TABLE IF NOT EXISTS ${q(tenantDbName)}.services (
         id VARCHAR(64) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
+        category VARCHAR(64) NOT NULL DEFAULT 'general',
+        description TEXT NULL,
         duration_minutes INT NOT NULL,
         price_cents INT NOT NULL DEFAULT 0,
+        display_order INT NOT NULL DEFAULT 0,
         is_active TINYINT(1) NOT NULL DEFAULT 1,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uniq_services_name (name),
+        INDEX idx_services_order (display_order),
         INDEX idx_services_active (is_active)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+
+    try {
+      await adminPool.query(
+        `ALTER TABLE ${q(tenantDbName)}.services ADD COLUMN category VARCHAR(64) NOT NULL DEFAULT 'general'`
+      );
+    } catch (error) {
+      if ((error as { code?: string })?.code !== 'ER_DUP_FIELDNAME') {
+        throw error;
+      }
+    }
+
+    try {
+      await adminPool.query(
+        `ALTER TABLE ${q(tenantDbName)}.services ADD COLUMN description TEXT NULL`
+      );
+    } catch (error) {
+      if ((error as { code?: string })?.code !== 'ER_DUP_FIELDNAME') {
+        throw error;
+      }
+    }
+
+    try {
+      await adminPool.query(
+        `ALTER TABLE ${q(tenantDbName)}.services ADD COLUMN display_order INT NOT NULL DEFAULT 0`
+      );
+    } catch (error) {
+      if ((error as { code?: string })?.code !== 'ER_DUP_FIELDNAME') {
+        throw error;
+      }
+    }
+
+    try {
+      await adminPool.query(`CREATE INDEX idx_services_order ON ${q(tenantDbName)}.services (display_order)`);
+    } catch (error) {
+      if ((error as { code?: string })?.code !== 'ER_DUP_KEYNAME') {
+        throw error;
+      }
+    }
 
     await adminPool.query(`
       CREATE TABLE IF NOT EXISTS ${q(tenantDbName)}.staff (
@@ -948,6 +1379,28 @@ async function ensureTenantSchema(tenantDbName: string): Promise<void> {
           ON DELETE SET NULL ON UPDATE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+
+    // business_settings table
+    await adminPool.query(`
+  CREATE TABLE IF NOT EXISTS ${q(tenantDbName)}.business_settings (
+    id         INT PRIMARY KEY DEFAULT 1,
+    business_type VARCHAR(64) NOT NULL DEFAULT '',
+    phone      VARCHAR(64)  NOT NULL DEFAULT '',
+    address    VARCHAR(255) NOT NULL DEFAULT '',
+    logo_url   VARCHAR(512) NOT NULL DEFAULT '',
+    schedules  JSON         NOT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+`);
+
+    // specialties column in staff
+    try {
+      await adminPool.query(
+        `ALTER TABLE ${q(tenantDbName)}.staff ADD COLUMN specialties JSON NOT NULL DEFAULT (JSON_ARRAY())`
+      );
+    } catch (error) {
+      if ((error as { code?: string })?.code !== 'ER_DUP_FIELDNAME') throw error;
+    }
   } finally {
     await adminPool.end();
   }
@@ -1000,14 +1453,38 @@ async function migrateLegacySharedTablesToTenantDbs(): Promise<void> {
 
     await db.query(
       `
-        INSERT INTO ${q(tenantDbName)}.services (id, name, duration_minutes, price_cents, is_active, created_at, updated_at)
-        SELECT id, name, duration_minutes, price_cents, is_active, created_at, updated_at
+        INSERT INTO ${q(tenantDbName)}.services (
+          id,
+          name,
+          category,
+          description,
+          duration_minutes,
+          price_cents,
+          display_order,
+          is_active,
+          created_at,
+          updated_at
+        )
+        SELECT
+          id,
+          name,
+          'general' AS category,
+          '' AS description,
+          duration_minutes,
+          price_cents,
+          0 AS display_order,
+          is_active,
+          created_at,
+          updated_at
         FROM services
         WHERE user_id = ?
         ON DUPLICATE KEY UPDATE
           name = VALUES(name),
+          category = VALUES(category),
+          description = VALUES(description),
           duration_minutes = VALUES(duration_minutes),
           price_cents = VALUES(price_cents),
+          display_order = VALUES(display_order),
           is_active = VALUES(is_active),
           updated_at = VALUES(updated_at)
       `,
@@ -1100,6 +1577,9 @@ function rowToUserRecord(
     id: row.id,
     name: row.name,
     email: row.email,
+    emailVerified: row.email_verified === 1,
+    emailVerificationToken: row.email_verification_token ?? undefined,
+    termsAcceptedAt: row.terms_accepted_at ?? undefined,
     password: row.password,
     plan: normalizePlan(row.plan),
     businessName: row.business_name,
@@ -1122,6 +1602,19 @@ function toAppointmentRecord(row: AppointmentJoinedRow): AppointmentRecord {
     time,
     notes: row.notes ?? '',
     status: normalizeAppointmentStatus(row.status),
+  };
+}
+
+function toServiceRecord(row: TenantServiceRow): ServiceRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    category: String(row.category || 'general').trim() || 'general',
+    durationMin: Number(row.duration_minutes || 0),
+    priceCents: Number(row.price_cents || 0),
+    description: row.description ?? '',
+    isActive: row.is_active === 1,
+    displayOrder: Number(row.display_order || 0),
   };
 }
 
@@ -1167,6 +1660,38 @@ function normalizeUpsertAppointmentInput(input: UpsertAppointmentInput): UpsertA
   };
 }
 
+function normalizeCreateServiceInput(input: CreateServiceInput): CreateServiceInput {
+  const displayOrderRaw =
+    input.displayOrder === undefined || input.displayOrder === null
+      ? undefined
+      : Number(input.displayOrder);
+
+  return {
+    name: String(input.name || '').trim(),
+    category: normalizeServiceCategory(input.category),
+    durationMin: Math.max(1, Math.floor(Number(input.durationMin || 0))),
+    priceCents: Math.max(0, Math.round(Number(input.priceCents || 0))),
+    description: String(input.description || '').trim(),
+    isActive: input.isActive ?? true,
+    displayOrder:
+      displayOrderRaw === undefined || !Number.isFinite(displayOrderRaw)
+        ? undefined
+        : Math.max(0, Math.floor(displayOrderRaw)),
+  };
+}
+
+function normalizeUpdateServiceInput(input: UpdateServiceInput, current: ServiceRecord): CreateServiceInput {
+  return normalizeCreateServiceInput({
+    name: input.name ?? current.name,
+    category: input.category ?? current.category,
+    durationMin: input.durationMin ?? current.durationMin,
+    priceCents: input.priceCents ?? current.priceCents,
+    description: input.description ?? current.description,
+    isActive: input.isActive ?? current.isActive,
+    displayOrder: input.displayOrder ?? current.displayOrder,
+  });
+}
+
 function normalizePlan(value: unknown): PlanId {
   if (value === 'starter' || value === 'pro' || value === 'enterprise') return value;
   return 'starter';
@@ -1190,6 +1715,16 @@ function normalizeEmail(email: string): string {
   return String(email || '').trim().toLowerCase();
 }
 
+function normalizeServiceCategory(value: unknown): string {
+  const raw = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-_]/g, '');
+
+  return raw || 'general';
+}
+
 function tenantDbNameFromUserId(userId: string): string {
   const safeId = String(userId || '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
   return `${env.mysqlTenantDbPrefix}${safeId}`;
@@ -1211,7 +1746,15 @@ function isPasswordHash(value: string): boolean {
 }
 
 function hashPassword(password: string): string {
+  if (env.storePlaintextPasswords) {
+    return password;
+  }
+
   return hashSync(password, SALT_ROUNDS);
+}
+
+function generateEmailVerificationToken(): string {
+  return randomUUID().replace(/-/g, '');
 }
 
 function q(identifier: string): string {
@@ -1228,8 +1771,8 @@ function isPrimaryKeyDuplicateError(error: unknown): boolean {
 
   const detail = String(
     (error as { sqlMessage?: string; message?: string })?.sqlMessage ??
-      (error as { message?: string })?.message ??
-      ''
+    (error as { message?: string })?.message ??
+    ''
   );
 
   return detail.toLowerCase().includes("for key 'primary'");
@@ -1240,8 +1783,8 @@ function isUsersEmailDuplicateError(error: unknown): boolean {
 
   const detail = String(
     (error as { sqlMessage?: string; message?: string })?.sqlMessage ??
-      (error as { message?: string })?.message ??
-      ''
+    (error as { message?: string })?.message ??
+    ''
   ).toLowerCase();
 
   return detail.includes("for key 'email'") || detail.includes("for key 'users.email'");
@@ -1273,4 +1816,180 @@ async function nextSequentialId(
 
 function escapeRegexForMySql(value: string): string {
   return String(value).replace(/[\\.^$*+?()[\]{}|]/g, '\\$&');
+}
+
+// ── Onboarding & Business Settings ────────────────────────
+
+export interface BusinessSettings {
+  businessType: string;
+  phone: string;
+  address: string;
+  logoUrl: string;
+  schedules: BusinessSchedule[];
+}
+
+export interface BusinessSchedule {
+  day: number; // 0=Lun, 6=Dom
+  open: boolean;
+  from: string;
+  to: string;
+}
+
+export interface StaffRecord {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  role: string;
+  specialties: string[];
+  isActive: boolean;
+}
+
+export interface CreateStaffInput {
+  fullName: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  specialties?: string[];
+}
+
+export async function getOnboardingStatus(userId: string): Promise<boolean> {
+  const db = getControlPool();
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT onboarding_completed FROM users WHERE id = ? LIMIT 1`,
+    [userId]
+  );
+  return rows[0]?.onboarding_completed === 1;
+}
+
+export async function setOnboardingCompleted(userId: string): Promise<void> {
+  const db = getControlPool();
+  await db.query(
+    `UPDATE users SET onboarding_completed = 1, updated_at = NOW() WHERE id = ?`,
+    [userId]
+  );
+}
+
+export async function getBusinessSettings(userId: string): Promise<BusinessSettings | null> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return null;
+
+  const db = getControlPool();
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT * FROM ${q(tenantDbName)}.business_settings LIMIT 1`
+  );
+
+  const row = rows[0];
+  if (!row) return null;
+
+  let schedules: BusinessSchedule[] = [];
+  try { schedules = JSON.parse(row.schedules || '[]'); } catch { schedules = []; }
+
+  return {
+    businessType: row.business_type ?? '',
+    phone: row.phone ?? '',
+    address: row.address ?? '',
+    logoUrl: row.logo_url ?? '',
+    schedules,
+  };
+}
+
+export async function upsertBusinessSettings(
+  userId: string,
+  input: Partial<BusinessSettings>
+): Promise<BusinessSettings | null> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return null;
+
+  const db = getControlPool();
+
+  const current = await getBusinessSettings(userId) ?? {
+    businessType: '', phone: '', address: '', logoUrl: '', schedules: [],
+  };
+
+  const next = {
+    businessType: input.businessType ?? current.businessType,
+    phone: input.phone ?? current.phone,
+    address: input.address ?? current.address,
+    logoUrl: input.logoUrl ?? current.logoUrl,
+    schedules: input.schedules ?? current.schedules,
+  };
+
+  await db.query(
+    `INSERT INTO ${q(tenantDbName)}.business_settings
+       (id, business_type, phone, address, logo_url, schedules, updated_at)
+     VALUES (1, ?, ?, ?, ?, ?, NOW())
+     ON DUPLICATE KEY UPDATE
+       business_type = VALUES(business_type),
+       phone         = VALUES(phone),
+       address       = VALUES(address),
+       logo_url      = VALUES(logo_url),
+       schedules     = VALUES(schedules),
+       updated_at    = NOW()`,
+    [next.businessType, next.phone, next.address, next.logoUrl, JSON.stringify(next.schedules)]
+  );
+
+  return getBusinessSettings(userId);
+}
+
+export async function listStaff(userId: string): Promise<StaffRecord[]> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return [];
+
+  const db = getControlPool();
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT id, full_name, email, phone, role, specialties, is_active
+     FROM ${q(tenantDbName)}.staff
+     ORDER BY full_name ASC`
+  );
+
+  return rows.map(rowToStaffRecord);
+}
+
+export async function createStaffMember(
+  userId: string,
+  input: CreateStaffInput
+): Promise<StaffRecord | null> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return null;
+
+  const db = getControlPool();
+  const staffId = `stf_${randomUUID()}`;
+
+  await db.query(
+    `INSERT INTO ${q(tenantDbName)}.staff
+       (id, full_name, email, phone, role, specialties, is_active, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 1, NOW(), NOW())`,
+    [
+      staffId,
+      String(input.fullName || '').trim(),
+      input.email || null,
+      input.phone || null,
+      input.role || 'staff',
+      JSON.stringify(input.specialties ?? []),
+    ]
+  );
+
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT id, full_name, email, phone, role, specialties, is_active
+     FROM ${q(tenantDbName)}.staff WHERE id = ? LIMIT 1`,
+    [staffId]
+  );
+
+  return rows[0] ? rowToStaffRecord(rows[0] as RowDataPacket) : null;
+}
+
+function rowToStaffRecord(row: RowDataPacket): StaffRecord {
+  let specialties: string[] = [];
+  try { specialties = JSON.parse(row.specialties || '[]'); } catch { specialties = []; }
+
+  return {
+    id: row.id,
+    fullName: row.full_name,
+    email: row.email ?? '',
+    phone: row.phone ?? '',
+    role: row.role ?? 'staff',
+    specialties,
+    isActive: row.is_active === 1,
+  };
 }

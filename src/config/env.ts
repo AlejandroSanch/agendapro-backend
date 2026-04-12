@@ -23,6 +23,7 @@ export const env = {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
+  frontendBaseUrl: (process.env.FRONTEND_BASE_URL || 'http://localhost:4200').trim(),
   mysqlHost: (process.env.MYSQL_HOST || '127.0.0.1').trim(),
   mysqlPort: parsePort(process.env.MYSQL_PORT, 3306),
   mysqlUser: (process.env.MYSQL_USER || 'root').trim(),
@@ -31,6 +32,7 @@ export const env = {
   mysqlTenantDbPrefix: (process.env.MYSQL_TENANT_DB_PREFIX || 'agendapro_tenant_').trim(),
   mysqlConnectionLimit: parsePort(process.env.MYSQL_CONNECTION_LIMIT, 10),
   mysqlAutoMigrateFromSqlite: parseBool(process.env.MYSQL_AUTO_MIGRATE_FROM_SQLITE, true),
+  storePlaintextPasswords: parseBool(process.env.STORE_PLAINTEXT_PASSWORDS, false),
   sqliteControlDbPath: (process.env.SQLITE_CONTROL_DB_PATH || 'storage/control.db').trim(),
   sqliteTenantsDbDir: (process.env.SQLITE_TENANTS_DB_DIR || 'storage/tenants').trim(),
 };
