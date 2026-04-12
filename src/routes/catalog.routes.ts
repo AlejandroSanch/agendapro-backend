@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { ALL_MODULES, getPlanModules, PLANS } from '../constants/catalog';
-import { getModuleOverrides } from '../data/store';
+import { getModuleOverrides } from '../data/repositories/user.repository';
 import { requireAuth } from '../middleware/auth';
 import { ModuleId } from '../types';
 

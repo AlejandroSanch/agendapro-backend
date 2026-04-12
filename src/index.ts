@@ -1,7 +1,7 @@
 import cors from 'cors';
 import express from 'express';
 import { env } from './config/env';
-import { initializeStore } from './data/store';
+import { initializeStore } from './data/schema';
 import { appointmentsRouter } from './routes/appointments.routes';
 import { authRouter } from './routes/auth.routes';
 import { catalogRouter } from './routes/catalog.routes';

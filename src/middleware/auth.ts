@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
-import { findUserById, sanitizeUser } from '../data/store';
+import { findUserById, sanitizeUser } from '../data/repositories/user.repository';
 
 interface AuthTokenPayload {
   sub: string;

@@ -3,7 +3,7 @@ import { existsSync } from 'fs';
 import { isAbsolute, join } from 'path';
 import mysql, { PoolConnection } from 'mysql2/promise';
 import { env } from '../config/env';
-import { initializeStore } from '../data/store';
+import { initializeStore } from '../data/schema';
 import { PlanId } from '../types';
 
 interface SqliteControlUserRow {

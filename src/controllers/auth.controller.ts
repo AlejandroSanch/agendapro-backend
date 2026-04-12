@@ -5,9 +5,9 @@ import {
   findUserByEmail,
   refreshEmailVerificationTokenByEmail,
   sanitizeUser,
-  verifyPassword,
   verifyUserEmailByToken,
-} from '../data/store'; // Temporarily importing from store
+} from '../data/repositories/user.repository';
+import { verifyPasswordPlain } from '../data/utils';
 import { issueAccessToken } from '../middleware/auth';
 import { env } from '../config/env';
 import {
@@ -32,7 +32,7 @@ export const AuthController = {
       const data = loginSchema.parse(req.body);
 
       const user = await findUserByEmail(data.email);
-      if (!user || !verifyPassword(user, data.password)) {
+      if (!user || !verifyPasswordPlain(user.password, data.password)) {
         res.status(401).json({ error: 'Credenciales inválidas.' });
         return;
       }
@@ -52,7 +52,7 @@ export const AuthController = {
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        res.status(400).json({ error: error.errors[0].message });
+        res.status(400).json({ error: (error as any).errors[0].message });
         return;
       }
       res.status(500).json({ error: 'Error interno del servidor.' });
@@ -95,7 +95,7 @@ export const AuthController = {
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        res.status(400).json({ error: error.errors[0].message });
+        res.status(400).json({ error: (error as any).errors[0].message });
         return;
       }
       res.status(500).json({ error: 'Error interno del servidor.' });
@@ -119,7 +119,7 @@ export const AuthController = {
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        res.status(400).json({ error: error.errors[0].message });
+        res.status(400).json({ error: (error as any).errors[0].message });
         return;
       }
       res.status(500).json({ error: 'Error interno del servidor.' });
@@ -151,7 +151,7 @@ export const AuthController = {
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        res.status(400).json({ error: error.errors[0].message });
+        res.status(400).json({ error: (error as any).errors[0].message });
         return;
       }
       res.status(500).json({ error: 'Error interno del servidor.' });
