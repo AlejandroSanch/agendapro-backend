@@ -26,5 +26,8 @@ Este archivo sirve como bitácora de los cambios arquitectónicos y mejoras prof
 - Se integró **Umzug**, un motor de versionamiento dinámico de bases de datos para NodeJS.
 - Se configuró el `migrator.ts` con una estructura de doble barril: Un migrador para la DB Principal (*Control*) y un enrutador generador de migradores para cada DB de cliente (*Tenants*).
 - Se extrajeron todos los esquemas pesados de SQL a versiones limpias e iterables y controlables bajo la ruta `src/data/migrations/*`.
-- Desde ahora, el servidor autogestionará las migraciones on-the-fly con tiempos de latencia y riesgo nulos gracias a la tabla del histórico `umzug_meta`.
-
+- Desde ahora, el servidor autogestionará las migraciones on-the-fly con tiempos de latencia y riesgo nulos gracias a la tabla del histórico `umzug_meta`.## Fase 5: Pruebas Automatizadas Unitarias con Jest (Terminada)
+- Se integró un robusto framework de Testing al Backend empleando `jest`, `ts-jest` y `supertest`.
+- Se introdujo el comando `npm run test` para auditar código sin necesidad de inicializar bases de datos (Unit Testing Rápido).
+- Se redactaron 2 colecciones de Test Suites bajo `src/tests/` comprobando la integridad de funciones vitales estandarizadas (Criptografía, Extracción ID y generadores ApiError).
+- Esto otorga certeza algorítmica para escalar con seguridad.
