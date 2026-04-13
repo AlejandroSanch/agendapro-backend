@@ -9,6 +9,7 @@ import { healthRouter } from './routes/health.routes';
 import { servicesRouter } from './routes/services.routes';
 import { usersRouter } from './routes/users.routes';
 import { onboardingRouter } from './routes/onboarding.routes';
+import { globalErrorHandler } from './middleware/error.middleware';
 
 
 const app = express();
@@ -39,13 +40,7 @@ app.use('/api/appointments', appointmentsRouter);
 app.use('/api/services', servicesRouter);
 app.use('/api/onboarding', onboardingRouter);
 
-app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  if (err instanceof Error && err.message.startsWith('CORS blocked')) {
-    res.status(403).json({ error: err.message });
-    return;
-  }
-  res.status(500).json({ error: 'Error interno del servidor.' });
-});
+app.use(globalErrorHandler);
 
 async function bootstrap(): Promise<void> {
   try {

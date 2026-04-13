@@ -1,5 +1,4 @@
 import { Request, Response } from 'express';
-import { z } from 'zod';
 import {
   createUser,
   findUserByEmail,
@@ -16,6 +15,8 @@ import {
   resendVerificationSchema,
   verificationTokenSchema,
 } from '../validators/auth.validators';
+import { asyncWrapper } from '../utils/asyncWrapper';
+import { ApiError } from '../utils/ApiError';
 
 function verificationPreview(token: string): { token: string; url: string } {
   const base = env.frontendBaseUrl.replace(/\/+$/, '');
@@ -27,138 +28,103 @@ function verificationPreview(token: string): { token: string; url: string } {
 }
 
 export const AuthController = {
-  async login(req: Request, res: Response): Promise<void> {
-    try {
-      const data = loginSchema.parse(req.body);
+  login: asyncWrapper(async (req: Request, res: Response) => {
+    const data = loginSchema.parse(req.body);
 
-      const user = await findUserByEmail(data.email);
-      if (!user || !verifyPasswordPlain(user.password, data.password)) {
-        res.status(401).json({ error: 'Credenciales inválidas.' });
-        return;
-      }
-
-      if (!user.emailVerified) {
-        res.status(403).json({
-          error: 'Debes verificar tu correo electrónico antes de iniciar sesión.',
-          requiresEmailVerification: true,
-        });
-        return;
-      }
-
-      const accessToken = issueAccessToken(user.id, user.email);
-      res.json({
-        accessToken,
-        user: sanitizeUser(user),
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: (error as any).errors[0].message });
-        return;
-      }
-      res.status(500).json({ error: 'Error interno del servidor.' });
+    const user = await findUserByEmail(data.email);
+    if (!user || !verifyPasswordPlain(user.password, data.password)) {
+      throw new ApiError(401, 'Credenciales inválidas.');
     }
-  },
 
-  async register(req: Request, res: Response): Promise<void> {
-    try {
-      const data = registerSchema.parse(req.body);
-
-      const existing = await findUserByEmail(data.email);
-      if (existing) {
-        res.status(409).json({ error: 'Ya existe un usuario con ese correo.' });
-        return;
-      }
-
-      const user = await createUser({
-        email: data.email,
-        password: data.password,
-        name: data.name,
-        businessName: data.businessName,
-        acceptTerms: data.acceptTerms,
-        plan: data.plan as any,
-      });
-
-      if (!user) {
-        res.status(409).json({ error: 'Ya existe un usuario con ese correo.' });
-        return;
-      }
-
-      const preview =
-        user.emailVerificationToken && process.env.NODE_ENV !== 'production'
-          ? verificationPreview(user.emailVerificationToken)
-          : null;
-
-      res.status(201).json({
+    if (!user.emailVerified) {
+      res.status(403).json({
+        error: 'Debes verificar tu correo electrónico antes de iniciar sesión.',
         requiresEmailVerification: true,
-        message: 'Cuenta creada. Revisa tu correo para verificar tu cuenta.',
-        verificationPreview: preview,
       });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: (error as any).errors[0].message });
-        return;
-      }
-      res.status(500).json({ error: 'Error interno del servidor.' });
+      return;
     }
-  },
 
-  async verifyEmail(req: Request, res: Response): Promise<void> {
-    try {
-      const data = verificationTokenSchema.parse(req.body);
+    const accessToken = issueAccessToken(user.id, user.email);
+    res.json({
+      accessToken,
+      user: sanitizeUser(user),
+    });
+  }),
 
-      const user = await verifyUserEmailByToken(data.token);
-      if (!user) {
-        res.status(400).json({ error: 'Token inválido o expirado.' });
-        return;
-      }
+  register: asyncWrapper(async (req: Request, res: Response) => {
+    const data = registerSchema.parse(req.body);
 
-      const accessToken = issueAccessToken(user.id, user.email);
-      res.json({
-        accessToken,
-        user: sanitizeUser(user),
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: (error as any).errors[0].message });
-        return;
-      }
-      res.status(500).json({ error: 'Error interno del servidor.' });
+    const existing = await findUserByEmail(data.email);
+    if (existing) {
+      throw new ApiError(409, 'Ya existe un usuario con ese correo.');
     }
-  },
 
-  async resendVerification(req: Request, res: Response): Promise<void> {
-    try {
-      const data = resendVerificationSchema.parse(req.body);
+    const user = await createUser({
+      email: data.email,
+      password: data.password,
+      name: data.name,
+      businessName: data.businessName,
+      acceptTerms: data.acceptTerms,
+      plan: data.plan as any,
+    });
 
-      const user = await findUserByEmail(data.email);
-      if (!user) {
-        res.json({ message: 'Si el correo existe, enviaremos un nuevo enlace de verificación.' });
-        return;
-      }
-
-      if (user.emailVerified) {
-        res.json({ message: 'Tu correo ya está verificado.' });
-        return;
-      }
-
-      const token = await refreshEmailVerificationTokenByEmail(data.email);
-      const preview =
-        token && process.env.NODE_ENV !== 'production' ? verificationPreview(token) : null;
-
-      res.json({
-        message: 'Si el correo existe, enviaremos un nuevo enlace de verificación.',
-        verificationPreview: preview,
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: (error as any).errors[0].message });
-        return;
-      }
-      res.status(500).json({ error: 'Error interno del servidor.' });
+    if (!user) {
+      throw new ApiError(409, 'Ya existe un usuario con ese correo.');
     }
-  },
 
-  getMe(req: Request, res: Response): void {
+    const preview =
+      user.emailVerificationToken && process.env.NODE_ENV !== 'production'
+        ? verificationPreview(user.emailVerificationToken)
+        : null;
+
+    res.status(201).json({
+      requiresEmailVerification: true,
+      message: 'Cuenta creada. Revisa tu correo para verificar tu cuenta.',
+      verificationPreview: preview,
+    });
+  }),
+
+  verifyEmail: asyncWrapper(async (req: Request, res: Response) => {
+    const data = verificationTokenSchema.parse(req.body);
+
+    const user = await verifyUserEmailByToken(data.token);
+    if (!user) {
+      throw new ApiError(400, 'Token inválido o expirado.');
+    }
+
+    const accessToken = issueAccessToken(user.id, user.email);
+    res.json({
+      accessToken,
+      user: sanitizeUser(user),
+    });
+  }),
+
+  resendVerification: asyncWrapper(async (req: Request, res: Response) => {
+    const data = resendVerificationSchema.parse(req.body);
+
+    const user = await findUserByEmail(data.email);
+    if (!user) {
+      res.json({ message: 'Si el correo existe, enviaremos un nuevo enlace de verificación.' });
+      return;
+    }
+
+    if (user.emailVerified) {
+      res.json({ message: 'Tu correo ya está verificado.' });
+      return;
+    }
+
+    const token = await refreshEmailVerificationTokenByEmail(data.email);
+    const preview =
+      token && process.env.NODE_ENV !== 'production' ? verificationPreview(token) : null;
+
+    res.json({
+      message: 'Si el correo existe, enviaremos un nuevo enlace de verificación.',
+      verificationPreview: preview,
+    });
+  }),
+
+  getMe: asyncWrapper(async (req: Request, res: Response) => {
+    if (!req.user) throw new ApiError(401, 'No autorizado.');
     res.json({ user: req.user });
-  },
+  }),
 };
