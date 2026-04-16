@@ -36,6 +36,13 @@ export const OnboardingController = {
       businessType: data.businessType,
       phone:        data.phone,
       address:      data.address,
+      street:       data.street,
+      extNumber:    data.extNumber,
+      intNumber:    data.intNumber,
+      neighborhood: data.neighborhood,
+      city:         data.city,
+      state:        data.state,
+      zipCode:      data.zipCode,
       logoUrl:      data.logoUrl,
       schedules:    data.schedules as any,
     });

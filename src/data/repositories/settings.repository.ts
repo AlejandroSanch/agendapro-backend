@@ -8,6 +8,13 @@ export interface BusinessSettings {
   businessType: string;
   phone: string;
   address: string;
+  street: string;
+  extNumber: string;
+  intNumber: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  zipCode: string;
   logoUrl: string;
   schedules: BusinessSchedule[];
 }
@@ -63,17 +70,29 @@ export async function getBusinessSettings(userId: string): Promise<BusinessSetti
   const row = rows[0];
   if (!row) return null;
 
-  let schedules: BusinessSchedule[] = [];
-  try {
-    schedules = JSON.parse(row.schedules || '[]');
-  } catch {
-    schedules = [];
-  }
+  // Cargar schedules desde la nueva tabla
+  const [hoursRows] = await db.query<RowDataPacket[]>(
+    `SELECT day_of_week, open_time, close_time, is_closed FROM ${q(tenantDbName)}.business_hours ORDER BY day_of_week ASC`
+  );
+
+  const schedules: BusinessSchedule[] = hoursRows.map(h => ({
+    day: h.day_of_week,
+    open: h.is_closed === 0,
+    from: h.open_time ? h.open_time.substring(0, 5) : '09:00',
+    to: h.close_time ? h.close_time.substring(0, 5) : '18:00'
+  }));
 
   return {
     businessType: row.business_type ?? '',
     phone: row.phone ?? '',
     address: row.address ?? '',
+    street: row.street ?? '',
+    extNumber: row.ext_number ?? '',
+    intNumber: row.int_number ?? '',
+    neighborhood: row.neighborhood ?? '',
+    city: row.city ?? '',
+    state: row.state ?? '',
+    zipCode: row.zip_code ?? '',
     logoUrl: row.logo_url ?? '',
     schedules,
   };
@@ -91,6 +110,13 @@ export async function upsertBusinessSettings(
     businessType: '',
     phone: '',
     address: '',
+    street: '',
+    extNumber: '',
+    intNumber: '',
+    neighborhood: '',
+    city: '',
+    state: '',
+    zipCode: '',
     logoUrl: '',
     schedules: [],
   };
@@ -99,26 +125,62 @@ export async function upsertBusinessSettings(
     businessType: input.businessType ?? current.businessType,
     phone: input.phone ?? current.phone,
     address: input.address ?? current.address,
+    street: input.street ?? current.street,
+    extNumber: input.extNumber ?? current.extNumber,
+    intNumber: input.intNumber ?? current.intNumber,
+    neighborhood: input.neighborhood ?? current.neighborhood,
+    city: input.city ?? current.city,
+    state: input.state ?? current.state,
+    zipCode: input.zipCode ?? current.zipCode,
     logoUrl: input.logoUrl ?? current.logoUrl,
     schedules: input.schedules ?? current.schedules,
   };
 
-  await db.query(
-    `
-      INSERT INTO ${q(tenantDbName)}.business_settings (id, business_type, phone, address, logo_url, schedules, updated_at)
-      VALUES (1, ?, ?, ?, ?, ?, NOW())
-      ON DUPLICATE KEY UPDATE
-        business_type = VALUES(business_type),
-        phone = VALUES(phone),
-        address = VALUES(address),
-        logo_url = VALUES(logo_url),
-        schedules = VALUES(schedules),
-        updated_at = NOW()
-    `,
-    [next.businessType, next.phone, next.address, next.logoUrl, JSON.stringify(next.schedules)]
-  );
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
 
-  return getBusinessSettings(userId);
+    await connection.query(
+      `
+        INSERT INTO ${q(tenantDbName)}.business_settings
+          (id, business_type, phone, address, street, ext_number, int_number, neighborhood, city, state, zip_code, logo_url, updated_at)
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE
+          business_type = VALUES(business_type),
+          phone = VALUES(phone),
+          address = VALUES(address),
+          street = VALUES(street),
+          ext_number = VALUES(ext_number),
+          int_number = VALUES(int_number),
+          neighborhood = VALUES(neighborhood),
+          city = VALUES(city),
+          state = VALUES(state),
+          zip_code = VALUES(zip_code),
+          logo_url = VALUES(logo_url),
+          updated_at = NOW()
+      `,
+      [next.businessType, next.phone, next.address, next.street, next.extNumber, next.intNumber, next.neighborhood, next.city, next.state, next.zipCode, next.logoUrl]
+    );
+
+    // Save Schedules to new table
+    await connection.query(`DELETE FROM ${q(tenantDbName)}.business_hours`);
+    if (next.schedules.length > 0) {
+      for (const sch of next.schedules) {
+        await connection.query(
+          `INSERT INTO ${q(tenantDbName)}.business_hours (day_of_week, open_time, close_time, is_closed) VALUES (?, ?, ?, ?)`,
+          [sch.day, sch.from || '00:00', sch.to || '00:00', sch.open ? 0 : 1]
+        );
+      }
+    }
+
+    await connection.commit();
+    return getBusinessSettings(userId);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function listStaff(userId: string): Promise<StaffRecord[]> {
@@ -128,9 +190,10 @@ export async function listStaff(userId: string): Promise<StaffRecord[]> {
   const db = getControlPool();
   const [rows] = await db.query<RowDataPacket[]>(
     `
-      SELECT id, full_name, email, phone, role, specialties, is_active
-      FROM ${q(tenantDbName)}.staff
-      ORDER BY full_name ASC
+      SELECT s.id, CONCAT(s.first_name, ' ', s.last_name) as full_name, s.email, s.phone, r.name as role, '' as specialties, s.is_active
+      FROM ${q(tenantDbName)}.staff s
+      LEFT JOIN ${q(tenantDbName)}.roles r ON s.role_id = r.id
+      ORDER BY s.first_name ASC
     `
   );
 
@@ -147,25 +210,39 @@ export async function createStaffMember(
   const db = getControlPool();
   const staffId = `stf_${randomUUID()}`;
 
+  let roleId = 'rl_staff';
+  const [roleRows] = await db.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.roles WHERE name = ? LIMIT 1`, [input.role || 'staff']);
+  if (!roleRows[0]) {
+    await db.query(`INSERT INTO ${q(tenantDbName)}.roles (id, name) VALUES (?, ?)`, [roleId, input.role || 'staff']);
+  } else {
+    roleId = roleRows[0].id;
+  }
+
+  const nameParts = String(input.fullName || '').trim().split(' ');
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.slice(1).join(' ') || '';
+
   await db.query(
     `
-      INSERT INTO ${q(tenantDbName)}.staff (id, full_name, email, phone, role, specialties, is_active, created_at, updated_at)
+      INSERT INTO ${q(tenantDbName)}.staff (id, role_id, first_name, last_name, email, phone, is_active, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
     `,
     [
       staffId,
-      String(input.fullName || '').trim(),
+      roleId,
+      firstName,
+      lastName,
       input.email || null,
       input.phone || null,
-      input.role || 'staff',
-      JSON.stringify(input.specialties ?? []),
     ]
   );
 
   const [rows] = await db.query<RowDataPacket[]>(
     `
-      SELECT id, full_name, email, phone, role, specialties, is_active
-      FROM ${q(tenantDbName)}.staff WHERE id = ? LIMIT 1
+      SELECT s.id, CONCAT(s.first_name, ' ', s.last_name) as full_name, s.email, s.phone, r.name as role, '' as specialties, s.is_active
+      FROM ${q(tenantDbName)}.staff s
+      LEFT JOIN ${q(tenantDbName)}.roles r ON s.role_id = r.id
+      WHERE s.id = ? LIMIT 1
     `,
     [staffId]
   );
@@ -190,4 +267,31 @@ function rowToStaffRecord(row: RowDataPacket): StaffRecord {
     specialties,
     isActive: row.is_active === 1,
   };
+}
+export async function isHolidayClosure(userId: string, date: string): Promise<boolean> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return false;
+
+  const db = getControlPool();
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT id FROM ${q(tenantDbName)}.holidays_closures WHERE closure_date = ? LIMIT 1`,
+    [date]
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Función de utilidad para insertar cierres de prueba.
+ */
+export async function seedHolidayClosures(userId: string, dates: string[]): Promise<void> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return;
+
+  const db = getControlPool();
+  for (const date of dates) {
+    await db.query(
+      `INSERT IGNORE INTO ${q(tenantDbName)}.holidays_closures (closure_date, reason) VALUES (?, ?)`,
+      [date, 'Cierres de prueba - Mantenimiento']
+    );
+  }
 }

@@ -54,9 +54,10 @@ export async function listServices(userId: string): Promise<ServiceRecord[]> {
   const db = getControlPool();
   const [rows] = await db.query<TenantServiceRow[]>(
     `
-      SELECT id, name, category, description, duration_minutes, price_cents, display_order, is_active
-      FROM ${q(tenantDbName)}.services
-      ORDER BY display_order ASC, name ASC
+      SELECT s.id, s.name, c.name AS category, '' AS description, s.duration_minutes, s.price_cents, s.display_order, s.is_active
+      FROM ${q(tenantDbName)}.services s
+      LEFT JOIN ${q(tenantDbName)}.categories c ON c.id = s.category_id
+      ORDER BY s.display_order ASC, s.name ASC
     `
   );
 
@@ -84,19 +85,28 @@ export async function createService(
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const serviceId = `svc_${randomUUID()}`;
 
+      const categoryId = 'cat_default';
+      const [catRows] = await connection.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.categories WHERE name = ? LIMIT 1`, [normalized.category]);
+      
+      let finalCatId = categoryId;
+      if (!catRows[0]) {
+        await connection.query(`INSERT IGNORE INTO ${q(tenantDbName)}.categories (id, name, description) VALUES (?, ?, '')`, [categoryId, normalized.category]);
+      } else {
+        finalCatId = catRows[0].id;
+      }
+
       try {
         await connection.query(
           `
             INSERT INTO ${q(tenantDbName)}.services (
-              id, name, category, description, duration_minutes, price_cents, display_order, is_active, created_at, updated_at
+              id, name, category_id, duration_minutes, price_cents, display_order, is_active, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
           `,
           [
             serviceId,
             normalized.name,
-            normalized.category,
-            normalized.description || null,
+            finalCatId,
             normalized.durationMin,
             normalized.priceCents,
             displayOrder,
@@ -137,16 +147,25 @@ export async function updateService(
   const normalized = normalizeUpdateServiceInput(input, current);
   const db = getControlPool();
 
+  const categoryId = 'cat_default';
+  const [catRows] = await db.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.categories WHERE name = ? LIMIT 1`, [normalized.category]);
+      
+  let finalCatId = categoryId;
+  if (!catRows[0]) {
+     await db.query(`INSERT IGNORE INTO ${q(tenantDbName)}.categories (id, name, description) VALUES (?, ?, '')`, [categoryId, normalized.category]);
+  } else {
+     finalCatId = catRows[0].id;
+  }
+
   const [result] = await db.query<ResultSetHeader>(
     `
       UPDATE ${q(tenantDbName)}.services
-      SET name = ?, category = ?, description = ?, duration_minutes = ?, price_cents = ?, display_order = ?, is_active = ?, updated_at = NOW()
+      SET name = ?, category_id = ?, duration_minutes = ?, price_cents = ?, display_order = ?, is_active = ?, updated_at = NOW()
       WHERE id = ?
     `,
     [
       normalized.name,
-      normalized.category,
-      normalized.description || null,
+      finalCatId,
       normalized.durationMin,
       normalized.priceCents,
       normalized.displayOrder,
@@ -178,7 +197,7 @@ export async function getServiceById(
 ): Promise<ServiceRecord | null> {
   const db = getControlPool();
   const [rows] = await db.query<TenantServiceRow[]>(
-    `SELECT id, name, category, description, duration_minutes, price_cents, display_order, is_active FROM ${q(tenantDbName)}.services WHERE id = ? LIMIT 1`,
+    `SELECT s.id, s.name, c.name AS category, '' AS description, s.duration_minutes, s.price_cents, s.display_order, s.is_active FROM ${q(tenantDbName)}.services s LEFT JOIN ${q(tenantDbName)}.categories c ON c.id = s.category_id WHERE s.id = ? LIMIT 1`,
     [serviceId]
   );
 

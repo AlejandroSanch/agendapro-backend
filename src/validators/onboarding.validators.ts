@@ -7,6 +7,13 @@ export const patchBusinessSettingsSchema = z.object({
   businessType: z.string().trim().optional(),
   phone: z.string().trim().optional(),
   address: z.string().trim().optional(),
+  street: z.string().trim().optional(),
+  extNumber: z.string().trim().optional(),
+  intNumber: z.string().trim().optional(),
+  neighborhood: z.string().trim().optional(),
+  city: z.string().trim().optional(),
+  state: z.string().trim().optional(),
+  zipCode: z.string().trim().optional(),
   logoUrl: z.string().trim().optional(),
   schedules: z.array(
     z.object({

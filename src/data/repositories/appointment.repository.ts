@@ -84,11 +84,12 @@ export async function listAppointments(
     `
       SELECT
         a.id, a.status, DATE_FORMAT(a.start_at, '%Y-%m-%d %H:%i:%s') AS start_at, a.notes,
-        c.full_name AS customer_name, c.phone AS customer_phone,
+        CONCAT(c.first_name, ' ', c.last_name) AS customer_name, c.phone AS customer_phone,
         s.name AS service_name, s.duration_minutes AS service_duration_minutes, s.price_cents AS service_price_cents
       FROM ${q(tenantDbName)}.appointments a
       INNER JOIN ${q(tenantDbName)}.customers c ON c.id = a.customer_id
-      INNER JOIN ${q(tenantDbName)}.services s ON s.id = a.service_id
+      LEFT JOIN ${q(tenantDbName)}.appointment_services aserv ON aserv.appointment_id = a.id
+      LEFT JOIN ${q(tenantDbName)}.services s ON s.id = aserv.service_id
       ${whereClause}
       ORDER BY a.start_at ASC
     `,
@@ -113,23 +114,42 @@ export async function createAppointment(
     await connection.beginTransaction();
 
     const customerId = await ensureCustomer(connection, tenantDbName, normalized.customerName, normalized.customerPhone ?? '');
+    
+    // Validar solapamiento de cliente
+    const overlap = await getCustomerOverlap(connection, tenantDbName, customerId, startAt, endAt);
+    if (overlap) {
+      throw new Error(`El cliente ya tiene una cita de "${overlap.serviceName}" a las ${overlap.time}.`);
+    }
+
     const serviceId = await ensureService(connection, tenantDbName, normalized.serviceName, normalized.durationMin, normalized.priceCents);
 
     const appointmentId = `apt_${randomUUID()}`;
     const startAt = composeMySqlDateTime(normalized.date, normalized.time);
     const endAt = addMinutesToMySqlDateTime(startAt, normalized.durationMin);
 
+    const [staffRows] = await connection.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.staff LIMIT 1`);
+    const defaultStaffId = staffRows[0]?.id || 'stf_placeholder';
+    if (!staffRows[0]) {
+      await connection.query(`INSERT IGNORE INTO ${q(tenantDbName)}.roles (id, name) VALUES ('rl_admin', 'Admin')`);
+      await connection.query(`INSERT IGNORE INTO ${q(tenantDbName)}.staff (id, role_id, first_name, last_name, is_active, created_at, updated_at) VALUES (?, 'rl_admin', 'Sin', 'Asignar', 1, NOW(), NOW())`, [defaultStaffId]);
+    }
+
     await connection.query(
       `
         INSERT INTO ${q(tenantDbName)}.appointments (
-          id, customer_id, service_id, staff_id, title, status, start_at, end_at, notes, created_at, updated_at
+          id, customer_id, title, status, start_at, end_at, notes, created_at, updated_at
         )
-        VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, NOW(), NOW())
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
       `,
       [
-        appointmentId, customerId, serviceId, `${normalized.serviceName} - ${normalized.customerName}`,
+        appointmentId, customerId, `${normalized.serviceName} - ${normalized.customerName}`,
         normalized.status, startAt, endAt, normalized.notes || null,
       ]
+    );
+
+    await connection.query(
+      `INSERT INTO ${q(tenantDbName)}.appointment_services (id, appointment_id, service_id, staff_id) VALUES (?, ?, ?, ?)`,
+      [`asv_${randomUUID()}`, appointmentId, serviceId, defaultStaffId]
     );
 
     await connection.commit();
@@ -176,16 +196,32 @@ export async function updateAppointment(
     const startAt = composeMySqlDateTime(merged.date, merged.time);
     const endAt = addMinutesToMySqlDateTime(startAt, merged.durationMin);
 
+    // Validar solapamiento de cliente
+    const overlap = await getCustomerOverlap(connection, tenantDbName, customerId, startAt, endAt, appointmentId);
+    if (overlap) {
+      throw new Error(`El cliente ya tiene una cita de "${overlap.serviceName}" a las ${overlap.time}.`);
+    }
+
     const [result] = await connection.query<ResultSetHeader>(
       `
         UPDATE ${q(tenantDbName)}.appointments
-        SET customer_id = ?, service_id = ?, title = ?, status = ?, start_at = ?, end_at = ?, notes = ?, updated_at = NOW()
+        SET customer_id = ?, title = ?, status = ?, start_at = ?, end_at = ?, notes = ?, updated_at = NOW()
         WHERE id = ?
       `,
       [
-        customerId, serviceId, `${merged.serviceName} - ${merged.customerName}`, merged.status,
+        customerId, `${merged.serviceName} - ${merged.customerName}`, merged.status,
         startAt, endAt, merged.notes || null, appointmentId,
       ]
+    );
+
+    // Update pivot
+    const [staffRows] = await connection.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.staff LIMIT 1`);
+    const defaultStaffId = staffRows[0]?.id || 'stf_placeholder';
+    
+    await connection.query(`DELETE FROM ${q(tenantDbName)}.appointment_services WHERE appointment_id = ?`, [appointmentId]);
+    await connection.query(
+      `INSERT INTO ${q(tenantDbName)}.appointment_services (id, appointment_id, service_id, staff_id) VALUES (?, ?, ?, ?)`,
+      [`asv_${randomUUID()}`, appointmentId, serviceId, defaultStaffId]
     );
 
     if (!result.affectedRows) {
@@ -212,11 +248,12 @@ async function getAppointmentById(
     `
       SELECT
         a.id, a.status, DATE_FORMAT(a.start_at, '%Y-%m-%d %H:%i:%s') AS start_at, a.notes,
-        c.full_name AS customer_name, c.phone AS customer_phone,
+        CONCAT(c.first_name, ' ', c.last_name) AS customer_name, c.phone AS customer_phone,
         s.name AS service_name, s.duration_minutes AS service_duration_minutes, s.price_cents AS service_price_cents
       FROM ${q(tenantDbName)}.appointments a
       INNER JOIN ${q(tenantDbName)}.customers c ON c.id = a.customer_id
-      INNER JOIN ${q(tenantDbName)}.services s ON s.id = a.service_id
+      LEFT JOIN ${q(tenantDbName)}.appointment_services aserv ON aserv.appointment_id = a.id
+      LEFT JOIN ${q(tenantDbName)}.services s ON s.id = aserv.service_id
       WHERE a.id = ? LIMIT 1
     `,
     [appointmentId]
@@ -237,7 +274,7 @@ async function ensureCustomer(
   const normalizedPhone = customerPhone.trim();
 
   const [rows] = await connection.query<IdRow[]>(
-    `SELECT id FROM ${q(tenantDbName)}.customers WHERE full_name = ? AND ((phone IS NULL AND ? = '') OR phone = ?) LIMIT 1`,
+    `SELECT id FROM ${q(tenantDbName)}.customers WHERE CONCAT(first_name, ' ', last_name) = ? AND ((phone IS NULL AND ? = '') OR phone = ?) LIMIT 1`,
     [normalizedName, normalizedPhone, normalizedPhone]
   );
 
@@ -248,7 +285,7 @@ async function ensureCustomer(
 
     try {
       await connection.query(
-        `INSERT INTO ${q(tenantDbName)}.customers (id, full_name, phone, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())`,
+        `INSERT INTO ${q(tenantDbName)}.customers (id, first_name, last_name, phone, created_at, updated_at) VALUES (?, ?, '', ?, NOW(), NOW())`,
         [customerId, normalizedName, normalizedPhone || null]
       );
       return customerId;
@@ -321,5 +358,47 @@ function toAppointmentRecord(row: AppointmentJoinedRow): AppointmentRecord {
     time,
     notes: row.notes ?? '',
     status: normalizeAppointmentStatus(row.status),
+  };
+}
+
+async function getCustomerOverlap(
+  connection: PoolConnection,
+  tenantDbName: string,
+  customerId: string,
+  startAt: string,
+  endAt: string,
+  excludeAppointmentId?: string
+): Promise<{ serviceName: string; time: string } | null> {
+  const whereParts = [
+    'a.customer_id = ?',
+    'a.start_at < ?',
+    'a.end_at > ?',
+    "a.status NOT IN ('cancelled', 'no_show')"
+  ];
+  const params = [customerId, endAt, startAt];
+
+  if (excludeAppointmentId) {
+    whereParts.push('a.id != ?');
+    params.push(excludeAppointmentId);
+  }
+
+  const [rows] = await connection.query<AppointmentJoinedRow[]>(
+    `
+      SELECT s.name as service_name, DATE_FORMAT(a.start_at, '%H:%i') as start_time
+      FROM ${q(tenantDbName)}.appointments a
+      LEFT JOIN ${q(tenantDbName)}.appointment_services aserv ON aserv.appointment_id = a.id
+      LEFT JOIN ${q(tenantDbName)}.services s ON s.id = aserv.service_id
+      WHERE ${whereParts.join(' AND ')}
+      LIMIT 1
+    `,
+    params
+  );
+
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    serviceName: row.service_name || 'Servicio desconocido',
+    time: row.start_time,
   };
 }
