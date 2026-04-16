@@ -53,7 +53,10 @@ async function ensureDemoUserIfNeeded(): Promise<void> {
   const db = getControlPool();
   const [rows] = await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS total FROM users`);
   const total = Number(rows[0]?.total ?? 0);
-  if (total > 0) return;
+  if (total > 0) {
+    await db.query(`UPDATE users SET onboarding_completed = 1 WHERE id = 'usr_demo_001'`);
+    return;
+  }
 
   const demoId = 'usr_demo_001';
   const demoTenantDbName = tenantDbNameFromUserId(demoId);
@@ -61,9 +64,9 @@ async function ensureDemoUserIfNeeded(): Promise<void> {
   await db.query(
     `
       INSERT INTO users (
-        id, name, email, password, email_verified, email_verification_token, terms_accepted_at, plan, business_name, avatar_initials, tenant_db_name, created_at, updated_at
+        id, name, email, password, email_verified, email_verification_token, terms_accepted_at, plan, business_name, avatar_initials, tenant_db_name, onboarding_completed, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, 1, NULL, NOW(), ?, ?, ?, ?, NOW(), NOW())
+      VALUES (?, ?, ?, ?, 1, NULL, NOW(), ?, ?, ?, ?, 1, NOW(), NOW())
     `,
     [demoId, 'Daniel Hernandez', 'demo@agendapro.com', hashPassword('demo123'), 'pro', 'Mi Negocio', 'DH', demoTenantDbName]
   );

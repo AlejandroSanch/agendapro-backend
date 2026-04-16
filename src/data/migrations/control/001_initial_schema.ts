@@ -35,69 +35,6 @@ export async function up({ context }: { context: MigrationContext }): Promise<vo
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
-  // Las siguientes son tablas Legadas que estaban en el modelo antiguo Monolítico y 
-  // se copiaban luego a las nuevas DBs dinámicas. Las dejamos para compatibilidad con código intermedio.
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS customers (
-      id VARCHAR(64) PRIMARY KEY,
-      user_id VARCHAR(64) NOT NULL,
-      full_name VARCHAR(255) NOT NULL,
-      email VARCHAR(255) NULL,
-      phone VARCHAR(64) NULL,
-      notes TEXT NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      INDEX idx_customers_user_name (user_id, full_name)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-  `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS services (
-      id VARCHAR(64) PRIMARY KEY,
-      user_id VARCHAR(64) NOT NULL,
-      name VARCHAR(255) NOT NULL,
-      duration_minutes INT NOT NULL,
-      price_cents INT NOT NULL DEFAULT 0,
-      is_active TINYINT(1) NOT NULL DEFAULT 1,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      INDEX idx_services_user_name (user_id, name)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-  `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS staff (
-      id VARCHAR(64) PRIMARY KEY,
-      user_id VARCHAR(64) NOT NULL,
-      full_name VARCHAR(255) NOT NULL,
-      email VARCHAR(255) NULL,
-      phone VARCHAR(64) NULL,
-      role VARCHAR(64) NOT NULL DEFAULT 'staff',
-      is_active TINYINT(1) NOT NULL DEFAULT 1,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      INDEX idx_staff_user_name (user_id, full_name)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-  `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS appointments (
-      id VARCHAR(64) PRIMARY KEY,
-      user_id VARCHAR(64) NOT NULL,
-      customer_id VARCHAR(64) NOT NULL,
-      service_id VARCHAR(64) NOT NULL,
-      staff_id VARCHAR(64) NULL,
-      title VARCHAR(255) NOT NULL,
-      status ENUM('scheduled','confirmed','completed','cancelled','no_show') NOT NULL DEFAULT 'scheduled',
-      start_at DATETIME NOT NULL,
-      end_at DATETIME NOT NULL,
-      notes TEXT NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      INDEX idx_appointments_user_start (user_id, start_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-  `);
 }
 
 // Opcional
