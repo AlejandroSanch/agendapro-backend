@@ -35,4 +35,9 @@ export const env = {
   storePlaintextPasswords: parseBool(process.env.STORE_PLAINTEXT_PASSWORDS, false),
   sqliteControlDbPath: (process.env.SQLITE_CONTROL_DB_PATH || 'storage/control.db').trim(),
   sqliteTenantsDbDir: (process.env.SQLITE_TENANTS_DB_DIR || 'storage/tenants').trim(),
+  smtpHost: process.env.SMTP_HOST || 'smtp.ethereal.email',
+  smtpPort: parsePort(process.env.SMTP_PORT, 587),
+  smtpUser: process.env.SMTP_USER || '',
+  smtpPass: process.env.SMTP_PASS || '',
+  smtpFromEmail: process.env.SMTP_FROM_EMAIL || 'no-reply@agendapro.com',
 };
