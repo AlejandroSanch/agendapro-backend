@@ -1,3 +1,4 @@
+// Refreshed import
 import { Request, Response } from 'express';
 import {
   listCategories,
@@ -16,7 +17,7 @@ import { ApiError } from '../utils/ApiError';
 export const CategoriesController = {
   list: asyncWrapper(async (req: Request, res: Response) => {
     if (!req.user) throw new ApiError(401, 'No autorizado.');
-    
+
     const categories = await listCategories(req.user.id);
     res.json({ categories });
   }),
@@ -25,7 +26,7 @@ export const CategoriesController = {
     if (!req.user) throw new ApiError(401, 'No autorizado.');
 
     const data = createCategorySchema.parse(req.body);
-    
+
     const created = await createCategory(req.user.id, {
       name: data.nombre,
       description: data.descripcion,
