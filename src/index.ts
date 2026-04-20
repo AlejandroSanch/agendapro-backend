@@ -11,6 +11,7 @@ import { usersRouter } from './routes/users.routes';
 import { onboardingRouter } from './routes/onboarding.routes';
 import { customersRouter } from './routes/customers.routes';
 import { staffRouter } from './routes/staff.routes';
+import { publicRouter } from './routes/public.routes';
 import { globalErrorHandler } from './middleware/error.middleware';
 import cron from 'node-cron';
 import { runRemindersJob } from './jobs/appointmentReminders';
@@ -44,6 +45,7 @@ app.use('/api/services', servicesRouter);
 app.use('/api/onboarding', onboardingRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/staff', staffRouter);
+app.use('/api/public', publicRouter);
 
 app.use(globalErrorHandler);
 

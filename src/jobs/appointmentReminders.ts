@@ -1,30 +1,23 @@
 import { RowDataPacket } from 'mysql2/promise';
 import { getControlPool } from '../data/db';
 import { sendMail } from '../utils/mailer';
+import { WhatsAppService } from '../utils/whatsapp';
 
 export async function runRemindersJob() {
-  console.log('⏰ Running 24h appointment reminders job...');
+  console.log('⏰ Running 24h appointment reminders job (WhatsApp & Email)...');
 
   try {
     const controlDb = getControlPool();
-    // Obtener todos los tenants que tienen configurada su base de datos
-    const [users] = await controlDb.query<RowDataPacket[]>('SELECT id, tenant_db_name, name, email FROM users WHERE tenant_db_name IS NOT NULL AND tenant_db_name != ""');
+    const whatsapp = WhatsAppService.getInstance();
+    
+    // Obtener todos los tenants
+    const [users] = await controlDb.query<RowDataPacket[]>('SELECT id, tenant_db_name, name FROM users WHERE tenant_db_name IS NOT NULL AND tenant_db_name != ""');
 
     for (const user of users) {
       const tenantDbName = user.tenant_db_name;
-      const tenantId = user.id;
 
       try {
-
-        // Buscar citas que:
-        // - Su estado es 'scheduled'
-        // - Comienzan exactamente dentro del rango de ~23 a 24.5 horas a partir de ahora, o quizás de 23.5 a 24.5.
-        //   Lo mejor es usar un intervalo estricto para evitar mandar el mismo repetidamente.
-        //   Aunque, la tabla 'notifications_log' nos ayudará a no enviar duplicados.
-        // - Vamos a ser proactivos y buscar citas entre AHORA y 24.5 horas que no tengan recordatorio de correo electrónico para ese ID.
-        // - Espera, la idea es enviarlo sólo "24h antes", no para cosas de hace 1 hora (quizás las acaban de reagendar).
-        // Así que el rango será de [23 horas adelante, a 25 horas adelante]. Luego verificamos notifications_log.
-        
+        // Buscamos citas 24h vista (entre 23 y 25 horas adelante)
         const [appointmentsToRemind] = await controlDb.query<RowDataPacket[]>(`
           SELECT 
             a.id AS appointment_id,
@@ -33,67 +26,66 @@ export async function runRemindersJob() {
             c.id AS customer_id,
             c.first_name,
             c.last_name,
-            c.email AS customer_email
+            c.email AS customer_email,
+            c.phone AS customer_phone
           FROM \`${tenantDbName}\`.appointments a
           JOIN \`${tenantDbName}\`.customers c ON a.customer_id = c.id
           WHERE a.status = 'scheduled'
             AND a.start_at BETWEEN DATE_ADD(NOW(), INTERVAL 23 HOUR) AND DATE_ADD(NOW(), INTERVAL 25 HOUR)
-            AND c.email IS NOT NULL
-            AND c.email != ''
-            AND NOT EXISTS (
-              SELECT 1 FROM \`${tenantDbName}\`.notifications_log nl
-              WHERE nl.appointment_id = a.id
-                AND nl.channel = 'email'
-                AND nl.subject LIKE '%Recordatorio%'
-                AND nl.status = 'sent'
-            )
         `);
 
-        if (appointmentsToRemind.length > 0) {
-          console.log(`📦 Encotrados ${appointmentsToRemind.length} recordatorios para el tenant ${tenantDbName}`);
-        }
-
         for (const apt of appointmentsToRemind) {
-          try {
-            const customerName = `${apt.first_name} ${apt.last_name}`.trim();
-            // Formatear fecha y hora para lectura amigable
-            const startTimeStr = new Date(apt.start_at).toLocaleString('es-ES', {
-              dateStyle: 'short',
-              timeStyle: 'short',
-            });
+          const customerName = `${apt.first_name} ${apt.last_name}`.trim();
+          const startTimeStr = new Date(apt.start_at).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+          const confirmLink = `${process.env.APP_URL || 'http://localhost:4200'}/confirmar-cita/${apt.appointment_id}`;
 
-            const subject = `Recordatorio de tu cita mañana: ${apt.title}`;
-            const textBody = `Hola ${customerName}, te recordamos que tienes una cita ("${apt.title}") pautada para el ${startTimeStr}. Te esperamos!`;
+          // --- 1. RECORDATORIO POR EMAIL ---
+          if (apt.customer_email && process.env.SMTP_USER !== 'tu_correo@gmail.com') {
+            const hasEmailLog = await notificationExists(controlDb, tenantDbName, apt.appointment_id, 'email');
+            if (!hasEmailLog) {
+              try {
+                const subject = `Recordatorio de tu cita mañana: ${apt.title}`;
+                const textBody = `Hola ${customerName}, te recordamos tu cita para el ${startTimeStr}. Confirma aquí: ${confirmLink}`;
+                await sendMail(apt.customer_email, subject, textBody);
+                await logNotification(controlDb, tenantDbName, apt.customer_id, apt.appointment_id, 'email', subject, textBody, 'sent');
+              } catch (e) { console.error('Email failed (Check SMTP credentials in .env)', (e as any).message); }
+            }
+          }
 
-            await sendMail(apt.customer_email, subject, textBody);
-
-            // Registrar el envío en la base de datos del tenant
-            await controlDb.query(
-              `INSERT INTO \`${tenantDbName}\`.notifications_log
-                 (id, customer_id, appointment_id, channel, subject, body, status, sent_at)
-               VALUES (UUID(), ?, ?, 'email', ?, ?, 'sent', NOW())`,
-              [apt.customer_id, apt.appointment_id, subject, textBody]
-            );
-
-          } catch (emailErr) {
-            console.error(`Failed to process reminder for apt ${apt.appointment_id}: `, emailErr);
-            // Si el correo falló, quizás también quieras registrarlo pero con estatus 'failed'
-            await controlDb.query(
-               `INSERT INTO \`${tenantDbName}\`.notifications_log
-                 (id, customer_id, appointment_id, channel, subject, body, status, sent_at)
-               VALUES (UUID(), ?, ?, 'email', ?, ?, 'failed', NOW())`,
-              [apt.customer_id, apt.appointment_id, 'Fallo de Recordatorio', 'Ocurrio un error al intentar enviar.', 'failed']
-            ).catch(err => console.error("Error inserting failed log", err));
+          // --- 2. RECORDATORIO POR WHATSAPP ---
+          if (apt.customer_phone) {
+            const hasWALog = await notificationExists(controlDb, tenantDbName, apt.appointment_id, 'whatsapp');
+            if (!hasWALog) {
+              try {
+                const waBody = `Hola ${customerName}, recordatorio de tu cita ("${apt.title}") para el ${startTimeStr}. ¿Nos acompañas? Confirma tu asistencia aquí: ${confirmLink}`;
+                const sent = await whatsapp.sendReminder(apt.customer_phone, waBody);
+                await logNotification(controlDb, tenantDbName, apt.customer_id, apt.appointment_id, 'whatsapp', 'Recordatorio WA', waBody, sent ? 'sent' : 'failed');
+              } catch (e) { console.error('WhatsApp failed', e); }
+            }
           }
         }
-
       } catch (tenantErr) {
-        console.error(`Failed to process reminders for tenant ${tenantDbName}:`, tenantErr);
+        console.error(`Error processing tenant ${tenantDbName}:`, tenantErr);
       }
     }
-    
     console.log('✅ Reminders job finished.');
   } catch (error) {
-    console.error('❌ Error executing reminders job:', error);
+    console.error('❌ Reminders job error:', error);
   }
+}
+
+async function notificationExists(db: any, tenant: string, aptId: string, channel: string): Promise<boolean> {
+  const [rows] = await db.query(
+    `SELECT 1 FROM \`${tenant}\`.notifications_log WHERE appointment_id = ? AND channel = ? AND status = 'sent' LIMIT 1`,
+    [aptId, channel]
+  );
+  return (rows as any[]).length > 0;
+}
+
+async function logNotification(db: any, tenant: string, custId: string, aptId: string, channel: string, subject: string, body: string, status: string) {
+  await db.query(
+    `INSERT INTO \`${tenant}\`.notifications_log (id, customer_id, appointment_id, channel, subject, body, status, sent_at)
+     VALUES (UUID(), ?, ?, ?, ?, ?, ?, NOW())`,
+    [custId, aptId, channel, subject, body, status]
+  );
 }
