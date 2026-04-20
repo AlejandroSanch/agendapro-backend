@@ -115,6 +115,17 @@ export async function createAppointment(
 
     const customerId = await ensureCustomer(connection, tenantDbName, normalized.customerName, normalized.customerPhone ?? '');
     
+    const startAt = composeMySqlDateTime(normalized.date, normalized.time);
+    const endAt = addMinutesToMySqlDateTime(startAt, normalized.durationMin);
+
+    // Validar: No permitir completar citas en el futuro
+    if (normalized.status === 'completed') {
+      const startAtDate = new Date(startAt.replace(' ', 'T'));
+      if (startAtDate > new Date()) {
+        throw new Error('No se puede completar una cita con fecha futura.');
+      }
+    }
+
     // Validar solapamiento de cliente
     const overlap = await getCustomerOverlap(connection, tenantDbName, customerId, startAt, endAt);
     if (overlap) {
@@ -124,8 +135,6 @@ export async function createAppointment(
     const serviceId = await ensureService(connection, tenantDbName, normalized.serviceName, normalized.durationMin, normalized.priceCents);
 
     const appointmentId = `apt_${randomUUID()}`;
-    const startAt = composeMySqlDateTime(normalized.date, normalized.time);
-    const endAt = addMinutesToMySqlDateTime(startAt, normalized.durationMin);
 
     const [staffRows] = await connection.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.staff LIMIT 1`);
     const defaultStaffId = staffRows[0]?.id || 'stf_placeholder';
@@ -195,6 +204,14 @@ export async function updateAppointment(
 
     const startAt = composeMySqlDateTime(merged.date, merged.time);
     const endAt = addMinutesToMySqlDateTime(startAt, merged.durationMin);
+
+    // Validar: No permitir completar citas en el futuro
+    if (merged.status === 'completed') {
+      const startAtDate = new Date(startAt.replace(' ', 'T'));
+      if (startAtDate > new Date()) {
+        throw new Error('No se puede completar una cita con fecha futura.');
+      }
+    }
 
     // Validar solapamiento de cliente
     const overlap = await getCustomerOverlap(connection, tenantDbName, customerId, startAt, endAt, appointmentId);

@@ -126,10 +126,16 @@ export const AppointmentsController = {
       status: statusToDb[data.estado as CitaEstado],
     };
 
-    const appointment = await createAppointment(req.user.id, payload);
-    if (!appointment) throw new ApiError(500, 'No se pudo crear la cita.');
-
-    res.status(201).json({ appointment: toApiAppointment(appointment) });
+    try {
+      const appointment = await createAppointment(req.user.id, payload);
+      if (!appointment) throw new ApiError(500, 'No se pudo crear la cita.');
+      res.status(201).json({ appointment: toApiAppointment(appointment) });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('fecha futura')) {
+        throw new ApiError(400, error.message);
+      }
+      throw error;
+    }
   }),
 
   update: asyncWrapper(async (req: Request, res: Response) => {
@@ -149,9 +155,15 @@ export const AppointmentsController = {
     if (data.notas !== undefined) payload.notes = data.notas;
     if (data.estado !== undefined) payload.status = statusToDb[data.estado as CitaEstado];
 
-    const appointment = await updateAppointment(req.user.id, params.id, payload);
-    if (!appointment) throw new ApiError(404, 'Cita no encontrada.');
-
-    res.json({ appointment: toApiAppointment(appointment) });
+    try {
+      const appointment = await updateAppointment(req.user.id, params.id, payload);
+      if (!appointment) throw new ApiError(404, 'Cita no encontrada.');
+      res.json({ appointment: toApiAppointment(appointment) });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('fecha futura')) {
+        throw new ApiError(400, error.message);
+      }
+      throw error;
+    }
   })
 };
