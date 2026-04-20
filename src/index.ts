@@ -1,5 +1,6 @@
 import cors from 'cors';
 import express from 'express';
+import helmet from 'helmet';
 import { env } from './config/env';
 import { initializeStore } from './data/schema';
 import { appointmentsRouter } from './routes/appointments.routes';
@@ -15,8 +16,12 @@ import { publicRouter } from './routes/public.routes';
 import { globalErrorHandler } from './middleware/error.middleware';
 import cron from 'node-cron';
 import { runRemindersJob } from './jobs/appointmentReminders';
+import { globalLimiter } from './middleware/rate-limit';
 
 const app = express();
+
+// Seguridad de Cabeceras HTTP
+app.use(helmet());
 
 app.use(
   cors({
@@ -35,6 +40,9 @@ app.use(express.json());
 app.get('/', (_req, res) => {
   res.json({ message: 'AgendaPro backend running.' });
 });
+
+// Limite global para evadir saturación/DDoS
+app.use('/api/', globalLimiter);
 
 app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
