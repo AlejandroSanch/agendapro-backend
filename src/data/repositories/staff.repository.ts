@@ -425,7 +425,7 @@ async function syncStaffServices(
 
   // Buscar service IDs por nombre
   const placeholders = serviceNames.map(() => '?').join(', ');
-  const [serviceRows] = await connection.query<RowDataPacket[]>(
+  const [serviceRows] = await connection.query(
     `SELECT id, name FROM ${q(tenantDbName)}.services WHERE name IN (${placeholders})`,
     serviceNames
   );
