@@ -5,6 +5,7 @@ export type ModuleId =
   | 'clientes'
   | 'pagos'
   | 'notificaciones'
+  | 'pos'
   | 'reportes'
   | 'configuracion'
   | 'servicios'

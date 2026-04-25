@@ -17,14 +17,32 @@ import {
 } from '../validators/auth.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
+import { sendMail } from '../utils/mailer';
+import {
+  buildVerificationEmailHtml,
+  buildVerificationEmailText,
+  buildVerificationUrl,
+} from '../templates/verification-email.template';
 
 function verificationPreview(token: string): { token: string; url: string } {
-  const base = env.frontendBaseUrl.replace(/\/+$/, '');
-  const encodedToken = encodeURIComponent(token);
   return {
     token,
-    url: `${base}/verificar-email?token=${encodedToken}`,
+    url: buildVerificationUrl(token),
   };
+}
+
+/**
+ * Envía el correo de verificación de forma asíncrona (fire-and-forget).
+ * No bloquea la respuesta HTTP.
+ */
+function sendVerificationEmail(email: string, userName: string, token: string): void {
+  const verificationUrl = buildVerificationUrl(token);
+  const html = buildVerificationEmailHtml({ userName, verificationUrl });
+  const text = buildVerificationEmailText({ userName, verificationUrl });
+
+  sendMail(email, 'Verifica tu correo - AgendaPro', text, html).catch((err) => {
+    console.error(`❌ Error enviando correo de verificación a ${email}:`, err);
+  });
 }
 
 export const AuthController = {
@@ -72,6 +90,11 @@ export const AuthController = {
       throw new ApiError(409, 'Ya existe un usuario con ese correo.');
     }
 
+    // Enviar correo de verificación (fire-and-forget)
+    if (user.emailVerificationToken) {
+      sendVerificationEmail(user.email, user.name, user.emailVerificationToken);
+    }
+
     const preview =
       user.emailVerificationToken && process.env.NODE_ENV !== 'production'
         ? verificationPreview(user.emailVerificationToken)
@@ -114,6 +137,12 @@ export const AuthController = {
     }
 
     const token = await refreshEmailVerificationTokenByEmail(data.email);
+
+    // Enviar correo de verificación (fire-and-forget)
+    if (token && user) {
+      sendVerificationEmail(user.email, user.name, token);
+    }
+
     const preview =
       token && process.env.NODE_ENV !== 'production' ? verificationPreview(token) : null;
 

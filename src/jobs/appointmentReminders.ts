@@ -4,7 +4,7 @@ import { sendMail } from '../utils/mailer';
 import { WhatsAppService } from '../utils/whatsapp';
 
 export async function runRemindersJob() {
-  console.log('⏰ Running 24h appointment reminders job (WhatsApp & Email)...');
+  console.log('⏰ Running 48h appointment reminders job (WhatsApp & Email)...');
 
   try {
     const controlDb = getControlPool();
@@ -17,7 +17,7 @@ export async function runRemindersJob() {
       const tenantDbName = user.tenant_db_name;
 
       try {
-        // Buscamos citas 24h vista (entre 23 y 25 horas adelante)
+        // Buscamos citas 48h vista (entre 47 y 49 horas adelante)
         const [appointmentsToRemind] = await controlDb.query<RowDataPacket[]>(`
           SELECT 
             a.id AS appointment_id,
@@ -31,7 +31,7 @@ export async function runRemindersJob() {
           FROM \`${tenantDbName}\`.appointments a
           JOIN \`${tenantDbName}\`.customers c ON a.customer_id = c.id
           WHERE a.status = 'scheduled'
-            AND a.start_at BETWEEN DATE_ADD(NOW(), INTERVAL 23 HOUR) AND DATE_ADD(NOW(), INTERVAL 25 HOUR)
+            AND a.start_at BETWEEN DATE_ADD(NOW(), INTERVAL 47 HOUR) AND DATE_ADD(NOW(), INTERVAL 49 HOUR)
         `);
 
         for (const apt of appointmentsToRemind) {
@@ -44,7 +44,7 @@ export async function runRemindersJob() {
             const hasEmailLog = await notificationExists(controlDb, tenantDbName, apt.appointment_id, 'email');
             if (!hasEmailLog) {
               try {
-                const subject = `Recordatorio de tu cita mañana: ${apt.title}`;
+                const subject = `Recordatorio de tu cita: ${apt.title}`;
                 const textBody = `Hola ${customerName}, te recordamos tu cita para el ${startTimeStr}. Confirma aquí: ${confirmLink}`;
                 await sendMail(apt.customer_email, subject, textBody);
                 await logNotification(controlDb, tenantDbName, apt.customer_id, apt.appointment_id, 'email', subject, textBody, 'sent');
@@ -58,6 +58,7 @@ export async function runRemindersJob() {
             if (!hasWALog) {
               try {
                 const waBody = `Hola ${customerName}, recordatorio de tu cita ("${apt.title}") para el ${startTimeStr}. ¿Nos acompañas? Confirma tu asistencia aquí: ${confirmLink}`;
+                console.log(`🔗 [TEST LINK] WhatsApp for ${customerName}: ${confirmLink}`);
                 const sent = await whatsapp.sendReminder(apt.customer_phone, waBody);
                 await logNotification(controlDb, tenantDbName, apt.customer_id, apt.appointment_id, 'whatsapp', 'Recordatorio WA', waBody, sent ? 'sent' : 'failed');
               } catch (e) { console.error('WhatsApp failed', e); }
@@ -88,4 +89,29 @@ async function logNotification(db: any, tenant: string, custId: string, aptId: s
      VALUES (UUID(), ?, ?, ?, ?, ?, ?, NOW())`,
     [custId, aptId, channel, subject, body, status]
   );
+}
+export async function printTestConfirmationLinks() {
+  console.log('🧪 Generating test confirmation links for recently scheduled appointments...');
+  try {
+    const controlDb = getControlPool();
+    const [users] = await controlDb.query<RowDataPacket[]>('SELECT tenant_db_name FROM users WHERE tenant_db_name IS NOT NULL AND tenant_db_name != ""');
+
+    for (const user of users) {
+      const [apts] = await controlDb.query<RowDataPacket[]>(`
+        SELECT a.id, a.title, c.first_name, c.last_name 
+        FROM \`${user.tenant_db_name}\`.appointments a
+        JOIN \`${user.tenant_db_name}\`.customers c ON a.customer_id = c.id
+        WHERE a.status = 'scheduled'
+        ORDER BY a.start_at ASC
+        LIMIT 3
+      `);
+
+      for (const apt of apts) {
+        const confirmLink = `${process.env.APP_URL || 'http://localhost:4200'}/confirmar-cita/${apt.id}`;
+        console.log(`👉 [${user.tenant_db_name}] ${apt.first_name} - ${apt.title}: ${confirmLink}`);
+      }
+    }
+  } catch (e) {
+    console.error('Error generating test links:', e);
+  }
 }

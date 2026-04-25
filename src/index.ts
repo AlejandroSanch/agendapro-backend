@@ -13,9 +13,12 @@ import { onboardingRouter } from './routes/onboarding.routes';
 import { customersRouter } from './routes/customers.routes';
 import { staffRouter } from './routes/staff.routes';
 import { publicRouter } from './routes/public.routes';
+import { categoriesRouter } from './routes/categories.routes';
+import { productsRouter } from './routes/products.routes';
+import { salesRouter } from './routes/sales.routes';
 import { globalErrorHandler } from './middleware/error.middleware';
 import cron from 'node-cron';
-import { runRemindersJob } from './jobs/appointmentReminders';
+import { runRemindersJob, printTestConfirmationLinks } from './jobs/appointmentReminders';
 import { globalLimiter } from './middleware/rate-limit';
 
 const app = express();
@@ -38,7 +41,7 @@ app.use(
 app.use(express.json());
 
 app.get('/', (_req, res) => {
-  res.json({ message: 'AgendaPro backend running.' });
+  res.json({ message: 'AgendaPro backend running v2.' });
 });
 
 // Limite global para evadir saturación/DDoS
@@ -54,6 +57,9 @@ app.use('/api/onboarding', onboardingRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/staff', staffRouter);
 app.use('/api/public', publicRouter);
+app.use('/api/categories', categoriesRouter);
+app.use('/api/products', productsRouter);
+app.use('/api/sales', salesRouter);
 
 app.use(globalErrorHandler);
 
@@ -67,6 +73,7 @@ async function bootstrap(): Promise<void> {
     // To make sure it works straight away or test it without waiting an hour
     if (process.env.NODE_ENV !== 'production') {
       setTimeout(() => {
+        printTestConfirmationLinks().catch(console.error);
         runRemindersJob().catch(console.error);
       }, 5000); // 5 seconds after boot up
     }

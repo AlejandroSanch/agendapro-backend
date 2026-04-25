@@ -40,7 +40,11 @@ function toApiAppointment(appointment: any) {
     id: appointment.id,
     clienteNombre: appointment.customerName,
     clienteTelefono: appointment.customerPhone,
-    servicio: appointment.serviceName,
+    servicio: (() => {
+      const original = appointment.serviceName || '';
+      const cleaned = original.replace(/^\[BORRADO\]\s+/i, '').replace(/\s+\(\d+\)$/, '');
+      return cleaned;
+    })(),
     duracionMin: appointment.durationMin,
     fecha: appointment.date,
     hora: appointment.time,

@@ -13,6 +13,7 @@ export interface ServiceRecord {
   id: string;
   name: string;
   category: string;
+  categoryId: string;
   durationMin: number;
   priceCents: number;
   description: string;
@@ -36,6 +37,7 @@ interface TenantServiceRow extends RowDataPacket {
   id: string;
   name: string;
   category: string;
+  category_id: string;
   description: string | null;
   duration_minutes: number;
   price_cents: number;
@@ -54,9 +56,10 @@ export async function listServices(userId: string): Promise<ServiceRecord[]> {
   const db = getControlPool();
   const [rows] = await db.query<TenantServiceRow[]>(
     `
-      SELECT s.id, s.name, c.name AS category, '' AS description, s.duration_minutes, s.price_cents, s.display_order, s.is_active
+      SELECT s.id, s.name, c.name AS category, s.category_id, s.description, s.duration_minutes, s.price_cents, s.display_order, s.is_active
       FROM ${q(tenantDbName)}.services s
       LEFT JOIN ${q(tenantDbName)}.categories c ON c.id = s.category_id
+      WHERE s.deleted_at IS NULL
       ORDER BY s.display_order ASC, s.name ASC
     `
   );
@@ -85,12 +88,16 @@ export async function createService(
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const serviceId = `svc_${randomUUID()}`;
 
-      const categoryId = 'cat_default';
-      const [catRows] = await connection.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.categories WHERE name = ? LIMIT 1`, [normalized.category]);
+      let finalCatId = '';
+      const [catRows] = await connection.query<RowDataPacket[]>(
+        `SELECT id FROM ${q(tenantDbName)}.categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1`,
+        [normalized.category]
+      );
       
-      let finalCatId = categoryId;
       if (!catRows[0]) {
-        await connection.query(`INSERT IGNORE INTO ${q(tenantDbName)}.categories (id, name, description) VALUES (?, ?, '')`, [categoryId, normalized.category]);
+        // Generar un ID único para la categoría nueva
+        finalCatId = `cat_${randomUUID()}`;
+        await connection.query(`INSERT IGNORE INTO ${q(tenantDbName)}.categories (id, name, description) VALUES (?, ?, '')`, [finalCatId, normalized.category]);
       } else {
         finalCatId = catRows[0].id;
       }
@@ -99,14 +106,15 @@ export async function createService(
         await connection.query(
           `
             INSERT INTO ${q(tenantDbName)}.services (
-              id, name, category_id, duration_minutes, price_cents, display_order, is_active, created_at, updated_at
+              id, name, category_id, description, duration_minutes, price_cents, display_order, is_active, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
           `,
           [
             serviceId,
             normalized.name,
             finalCatId,
+            normalized.description,
             normalized.durationMin,
             normalized.priceCents,
             displayOrder,
@@ -147,25 +155,36 @@ export async function updateService(
   const normalized = normalizeUpdateServiceInput(input, current);
   const db = getControlPool();
 
-  const categoryId = 'cat_default';
-  const [catRows] = await db.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.categories WHERE name = ? LIMIT 1`, [normalized.category]);
-      
-  let finalCatId = categoryId;
-  if (!catRows[0]) {
-     await db.query(`INSERT IGNORE INTO ${q(tenantDbName)}.categories (id, name, description) VALUES (?, ?, '')`, [categoryId, normalized.category]);
-  } else {
-     finalCatId = catRows[0].id;
+  // Solo re-resolver categoría si se está cambiando explícitamente
+  let finalCatId = current.categoryId;
+  if (input.category !== undefined) {
+    const targetCategory = (normalized.category || 'general').trim();
+    const [catRows] = await db.query<RowDataPacket[]>(
+      `SELECT id FROM ${q(tenantDbName)}.categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1`,
+      [targetCategory]
+    );
+
+    if (!catRows[0]) {
+      finalCatId = `cat_${randomUUID()}`;
+      await db.query(`INSERT IGNORE INTO ${q(tenantDbName)}.categories (id, name, description) VALUES (?, ?, '')`, [
+        finalCatId,
+        targetCategory.toLowerCase() === 'general' ? 'general' : targetCategory,
+      ]);
+    } else {
+      finalCatId = catRows[0].id;
+    }
   }
 
   const [result] = await db.query<ResultSetHeader>(
     `
       UPDATE ${q(tenantDbName)}.services
-      SET name = ?, category_id = ?, duration_minutes = ?, price_cents = ?, display_order = ?, is_active = ?, updated_at = NOW()
+      SET name = ?, category_id = ?, description = ?, duration_minutes = ?, price_cents = ?, display_order = ?, is_active = ?, updated_at = NOW()
       WHERE id = ?
     `,
     [
       normalized.name,
       finalCatId,
+      normalized.description,
       normalized.durationMin,
       normalized.priceCents,
       normalized.displayOrder,
@@ -183,12 +202,41 @@ export async function deleteService(userId: string, serviceId: string): Promise<
   if (!tenantDbName) return false;
 
   const db = getControlPool();
+  
+  // Renombramos el servicio al "borrarlo" para liberar el nombre original
+  // y lo marcamos con deleted_at
   const [result] = await db.query<ResultSetHeader>(
-    `DELETE FROM ${q(tenantDbName)}.services WHERE id = ?`,
+    `
+      UPDATE ${q(tenantDbName)}.services 
+      SET 
+        deleted_at = NOW(),
+        is_active = 0,
+        name = CONCAT('[BORRADO] ', name, ' (', DATE_FORMAT(NOW(), '%H%i%s'), ')')
+      WHERE id = ? AND deleted_at IS NULL
+    `,
     [serviceId]
   );
 
   return result.affectedRows > 0;
+}
+
+export async function hasActiveAppointments(userId: string, serviceId: string): Promise<boolean> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return false;
+
+  const db = getControlPool();
+  const [rows] = await db.query<RowDataPacket[]>(
+    `
+      SELECT COUNT(*) as total 
+      FROM ${q(tenantDbName)}.appointment_services aps
+      JOIN ${q(tenantDbName)}.appointments a ON a.id = aps.appointment_id
+      WHERE aps.service_id = ? 
+        AND a.status IN ('scheduled', 'confirmed')
+    `,
+    [serviceId]
+  );
+
+  return Number(rows[0]?.total ?? 0) > 0;
 }
 
 export async function getServiceById(
@@ -197,7 +245,7 @@ export async function getServiceById(
 ): Promise<ServiceRecord | null> {
   const db = getControlPool();
   const [rows] = await db.query<TenantServiceRow[]>(
-    `SELECT s.id, s.name, c.name AS category, '' AS description, s.duration_minutes, s.price_cents, s.display_order, s.is_active FROM ${q(tenantDbName)}.services s LEFT JOIN ${q(tenantDbName)}.categories c ON c.id = s.category_id WHERE s.id = ? LIMIT 1`,
+    `SELECT s.id, s.name, c.name AS category, s.category_id, s.description, s.duration_minutes, s.price_cents, s.display_order, s.is_active FROM ${q(tenantDbName)}.services s LEFT JOIN ${q(tenantDbName)}.categories c ON c.id = s.category_id WHERE s.id = ? LIMIT 1`,
     [serviceId]
   );
 
@@ -255,6 +303,7 @@ function toServiceRecord(row: TenantServiceRow): ServiceRecord {
     id: row.id,
     name: row.name,
     category: String(row.category || 'general').trim() || 'general',
+    categoryId: row.category_id || '',
     durationMin: Number(row.duration_minutes || 0),
     priceCents: Number(row.price_cents || 0),
     description: row.description ?? '',

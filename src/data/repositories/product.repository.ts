@@ -1,0 +1,154 @@
+import { randomUUID } from 'crypto';
+import { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import { getControlPool } from '../db';
+import { q } from '../utils';
+import { getTenantDbNameByUserId } from './user.repository';
+
+export interface ProductRecord {
+  id: string;
+  supplierId: string | null;
+  sku: string | null;
+  name: string;
+  priceCents: number;
+  costCents: number;
+  stockQuantity: number;
+  reorderAlertLevel: number;
+  isActive: boolean;
+}
+
+export interface CreateProductInput {
+  supplierId?: string | null;
+  sku?: string | null;
+  name: string;
+  priceCents: number;
+  costCents?: number;
+  stockQuantity?: number;
+  reorderAlertLevel?: number;
+  isActive?: boolean;
+}
+
+export type UpdateProductInput = Partial<CreateProductInput>;
+
+interface TenantProductRow extends RowDataPacket {
+  id: string;
+  supplier_id: string | null;
+  sku: string | null;
+  name: string;
+  price_cents: number;
+  cost_cents: number;
+  stock_quantity: number;
+  reorder_alert_level: number;
+  is_active: number;
+}
+
+export async function listProducts(userId: string): Promise<ProductRecord[]> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return [];
+
+  const db = getControlPool();
+  const [rows] = await db.query<TenantProductRow[]>(
+    `
+      SELECT id, supplier_id, sku, name, price_cents, cost_cents, stock_quantity, reorder_alert_level, is_active
+      FROM ${q(tenantDbName)}.products
+      WHERE is_active = 1
+      ORDER BY name ASC
+    `
+  );
+
+  return rows.map(toProductRecord);
+}
+
+export async function createProduct(
+  userId: string,
+  input: CreateProductInput
+): Promise<ProductRecord | null> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return null;
+
+  const db = getControlPool();
+  const productId = `prod_${randomUUID()}`;
+
+  await db.query(
+    `
+      INSERT INTO ${q(tenantDbName)}.products (
+        id, supplier_id, sku, name, price_cents, cost_cents, stock_quantity, reorder_alert_level, is_active
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      productId,
+      input.supplierId ?? null,
+      input.sku ?? null,
+      input.name,
+      input.priceCents,
+      input.costCents ?? 0,
+      input.stockQuantity ?? 0,
+      input.reorderAlertLevel ?? 0,
+      input.isActive ?? true ? 1 : 0,
+    ]
+  );
+
+  return getProductById(tenantDbName, productId);
+}
+
+export async function updateProduct(
+  userId: string,
+  productId: string,
+  input: UpdateProductInput
+): Promise<ProductRecord | null> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return null;
+
+  const db = getControlPool();
+  
+  const fields: string[] = [];
+  const values: any[] = [];
+
+  if (input.supplierId !== undefined) { fields.push('supplier_id = ?'); values.push(input.supplierId); }
+  if (input.sku !== undefined) { fields.push('sku = ?'); values.push(input.sku); }
+  if (input.name !== undefined) { fields.push('name = ?'); values.push(input.name); }
+  if (input.priceCents !== undefined) { fields.push('price_cents = ?'); values.push(input.priceCents); }
+  if (input.costCents !== undefined) { fields.push('cost_cents = ?'); values.push(input.costCents); }
+  if (input.stockQuantity !== undefined) { fields.push('stock_quantity = ?'); values.push(input.stockQuantity); }
+  if (input.reorderAlertLevel !== undefined) { fields.push('reorder_alert_level = ?'); values.push(input.reorderAlertLevel); }
+  if (input.isActive !== undefined) { fields.push('is_active = ?'); values.push(input.isActive ? 1 : 0); }
+
+  if (fields.length === 0) return getProductById(tenantDbName, productId);
+
+  values.push(productId);
+  await db.query(
+    `UPDATE ${q(tenantDbName)}.products SET ${fields.join(', ')} WHERE id = ?`,
+    values
+  );
+
+  return getProductById(tenantDbName, productId);
+}
+
+export async function getProductById(
+  tenantDbName: string,
+  productId: string
+): Promise<ProductRecord | null> {
+  const db = getControlPool();
+  const [rows] = await db.query<TenantProductRow[]>(
+    `SELECT * FROM ${q(tenantDbName)}.products WHERE id = ? LIMIT 1`,
+    [productId]
+  );
+
+  const row = rows[0];
+  if (!row) return null;
+  return toProductRecord(row);
+}
+
+function toProductRecord(row: TenantProductRow): ProductRecord {
+  return {
+    id: row.id,
+    supplierId: row.supplier_id,
+    sku: row.sku,
+    name: row.name,
+    priceCents: row.price_cents,
+    costCents: row.cost_cents,
+    stockQuantity: row.stock_quantity,
+    reorderAlertLevel: row.reorder_alert_level,
+    isActive: row.is_active === 1,
+  };
+}

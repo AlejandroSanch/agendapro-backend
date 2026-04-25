@@ -36,12 +36,7 @@ export function normalizeEmail(email: string): string {
 }
 
 export function normalizeServiceCategory(value: unknown): string {
-  const raw = String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-_]/g, '');
-
+  const raw = String(value || '').trim();
   return raw || 'general';
 }
 

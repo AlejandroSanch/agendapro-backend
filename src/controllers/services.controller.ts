@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import {
   createService,
   deleteService,
+  hasActiveAppointments,
   listServices,
   ServiceRecord,
   updateService,
@@ -13,8 +14,9 @@ import { ApiError } from '../utils/ApiError';
 function toApiService(service: ServiceRecord) {
   return {
     id: service.id,
-    nombre: service.name,
+    nombre: service.name.replace(/^\[BORRADO\] /, '').replace(/ \(\d{6}\)$/, ''),
     categoria: service.category,
+    categoriaId: service.categoryId,
     duracionMin: service.durationMin,
     precio: service.priceCents / 100,
     descripcion: service.description,
@@ -99,11 +101,19 @@ export const ServicesController = {
     const params = serviceIdParamSchema.parse(req.params);
 
     try {
+      // 1. Verificar si tiene citas activas (programadas o confirmadas)
+      const hasActive = await hasActiveAppointments(req.user.id, params.id);
+      if (hasActive) {
+        throw new ApiError(409, 'No se puede eliminar: el servicio tiene citas próximas programadas. Por favor cámbialas o cancélalas primero.');
+      }
+
+      // 2. Realizar borrado lógico
       const deleted = await deleteService(req.user.id, params.id);
-      if (!deleted) throw new ApiError(404, 'Servicio no encontrado.');
+      if (!deleted) throw new ApiError(404, 'Servicio no encontrado o ya eliminado.');
+      
       res.json({ ok: true });
     } catch (error) {
-      if (isServiceInUseError(error)) throw new ApiError(409, 'No se puede eliminar: el servicio tiene citas asociadas.');
+      if (error instanceof ApiError) throw error;
       throw error;
     }
   })

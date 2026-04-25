@@ -84,7 +84,7 @@ export async function getAppointmentPublicDetails(req: Request, res: Response) {
             date: apt.start_at,
             customerName: apt.customer_name,
             businessName: bizName,
-            serviceName: apt.service_name || apt.title || 'Servicio Profesional',
+            serviceName: (apt.service_name || apt.title || 'Servicio Profesional').replace(/^\[BORRADO\] /, '').replace(/ \(\d{6}\)$/, ''),
             specialistName: `${apt.specialist_name || ''} ${apt.specialist_last_name || ''}`.trim() || 'Especialista asignado',
             businessAddress: apt.business_address || 'Dirección por confirmar'
           });

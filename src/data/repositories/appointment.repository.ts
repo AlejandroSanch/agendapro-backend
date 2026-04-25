@@ -326,6 +326,7 @@ async function ensureService(
 ): Promise<string> {
   const normalizedName = serviceName.trim();
 
+  // 1. Intentar encontrar servicio existente por nombre
   const [rows] = await connection.query<IdRow[]>(
     `SELECT id FROM ${q(tenantDbName)}.services WHERE name = ? LIMIT 1`,
     [normalizedName]
@@ -339,10 +340,40 @@ async function ensureService(
     return rows[0].id;
   }
 
+  // 2. No existe, vamos a crearlo. Primero necesitamos una categoría (por defecto 'General')
+  const defaultCategory = 'General';
+  let categoryId: string;
+
+  const [catRows] = await connection.query<IdRow[]>(
+    `SELECT id FROM ${q(tenantDbName)}.categories WHERE LOWER(name) = LOWER(?) LIMIT 1`,
+    [defaultCategory]
+  );
+
+  if (catRows[0]?.id) {
+    categoryId = catRows[0].id;
+  } else {
+    // Si no existe la categoría General, la creamos
+    categoryId = `cat_${randomUUID()}`;
+    await connection.query(
+      `INSERT IGNORE INTO ${q(tenantDbName)}.categories (id, name, description) VALUES (?, ?, 'Categoría por defecto para servicios auto-generados')`,
+      [categoryId, defaultCategory]
+    );
+    
+    // Si el INSERT IGNORE no insertó nada (porque se creó justo antes), volvemos a buscar el ID
+    const [catRowsRetry] = await connection.query<IdRow[]>(
+      `SELECT id FROM ${q(tenantDbName)}.categories WHERE LOWER(name) = LOWER(?) LIMIT 1`,
+      [defaultCategory]
+    );
+    if (catRowsRetry[0]?.id) {
+      categoryId = catRowsRetry[0].id;
+    }
+  }
+
+  // 3. Crear el servicio con el category_id resuelto
   const serviceId = `svc_${randomUUID()}`;
   await connection.query(
-    `INSERT INTO ${q(tenantDbName)}.services (id, name, duration_minutes, price_cents, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, NOW(), NOW())`,
-    [serviceId, normalizedName, durationMin, priceCents]
+    `INSERT INTO ${q(tenantDbName)}.services (id, category_id, name, duration_minutes, price_cents, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, NOW(), NOW())`,
+    [serviceId, categoryId, normalizedName, durationMin, priceCents]
   );
   return serviceId;
 }

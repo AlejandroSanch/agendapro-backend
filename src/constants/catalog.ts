@@ -1,48 +1,5 @@
 import { AppModule, ModuleId, Plan, PlanId } from '../types';
 
-export const PLANS: Plan[] = [
-  {
-    id: 'starter',
-    name: 'Starter',
-    price: '$19/mes',
-    modules: ['citas', 'clientes', 'servicios'],
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    price: '$49/mes',
-    modules: [
-      'citas',
-      'clientes',
-      'pagos',
-      'notificaciones',
-      'servicios',
-      'personal',
-      'inventario',
-      'fidelizacion',
-      'comisiones',
-    ],
-  },
-  {
-    id: 'enterprise',
-    name: 'Enterprise',
-    price: '$99/mes',
-    modules: [
-      'citas',
-      'clientes',
-      'pagos',
-      'notificaciones',
-      'reportes',
-      'configuracion',
-      'servicios',
-      'personal',
-      'inventario',
-      'fidelizacion',
-      'comisiones',
-    ],
-  },
-];
-
 export const ALL_MODULES: AppModule[] = [
   {
     id: 'citas',
@@ -79,6 +36,15 @@ export const ALL_MODULES: AppModule[] = [
     route: '/dashboard/notificaciones',
     color: '#7C3AED',
     bgColor: '#F5F3FF',
+  },
+  {
+    id: 'pos',
+    label: 'Punto de Venta (POS)',
+    icon: 'shopping-cart',
+    description: 'Venta rapida de servicios y productos con gestion de caja.',
+    route: '/dashboard/pos',
+    color: '#2563EB',
+    bgColor: '#EFF6FF',
   },
   {
     id: 'reportes',
@@ -142,6 +108,29 @@ export const ALL_MODULES: AppModule[] = [
     route: '/dashboard/comisiones',
     color: '#059669',
     bgColor: '#ECFDF5',
+  },
+];
+
+const ALL_MODULE_IDS: ModuleId[] = ALL_MODULES.map(m => m.id as ModuleId);
+
+export const PLANS: Plan[] = [
+  {
+    id: 'starter',
+    name: 'Starter',
+    price: '$19/mes',
+    modules: [...ALL_MODULE_IDS],
+  },
+  {
+    id: 'pro',
+    name: 'Pro',
+    price: '$49/mes',
+    modules: [...ALL_MODULE_IDS],
+  },
+  {
+    id: 'enterprise',
+    name: 'Enterprise',
+    price: '$99/mes',
+    modules: [...ALL_MODULE_IDS],
   },
 ];
 
