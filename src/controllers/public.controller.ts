@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { getControlPool } from '../data/db';
 import { RowDataPacket } from 'mysql2/promise';
+import { createSystemNotification } from '../data/repositories/notification.repository';
 
 /**
  * Confirma una cita de forma pública (sin auth) usando su ID.
@@ -33,10 +34,88 @@ export async function confirmAppointmentPublic(req: Request, res: Response) {
       [id]
     );
 
+    // --- NOTIFICACIÓN AL GESTOR ---
+    try {
+      const [aptInfo] = await db.query<RowDataPacket[]>(
+        `SELECT a.title, c.first_name, c.last_name FROM \`${foundTenant}\`.appointments a 
+         JOIN \`${foundTenant}\`.customers c ON a.customer_id = c.id WHERE a.id = ?`, [id]
+      );
+      const customerName = aptInfo[0] ? `${aptInfo[0].first_name} ${aptInfo[0].last_name}` : 'Cliente';
+      const aptTitle = aptInfo[0]?.title || 'Cita';
+
+      await createSystemNotification(foundTenant, {
+        type: 'appointment_confirmed',
+        title: 'Cita Confirmada ✅',
+        message: `${customerName} ha confirmado su cita para "${aptTitle}".`,
+        metadata: { appointment_id: id }
+      });
+    } catch (err) {
+      console.error('Error creating system notification:', err);
+    }
+
     res.json({ success: true, message: 'Cita confirmada correctamente.' });
   } catch (error) {
     console.error('Error confirming appointment:', error);
     res.status(500).json({ message: 'Error interno al confirmar la cita.' });
+  }
+}
+
+/**
+ * Confirma una cita vía GET (para links de email) y redirige al frontend.
+ */
+export async function confirmAppointmentPublicGet(req: Request, res: Response) {
+  const { id } = req.params;
+  const frontendUrl = process.env.APP_URL || 'http://localhost:4200';
+
+  try {
+    const db = getControlPool();
+    const [tenants] = await db.query<RowDataPacket[]>('SELECT tenant_db_name FROM users WHERE tenant_db_name IS NOT NULL');
+
+    let foundTenant = '';
+    for (const t of tenants) {
+      const [rows] = await db.query<RowDataPacket[]>(
+        `SELECT id FROM \`${t.tenant_db_name}\`.appointments WHERE id = ? LIMIT 1`,
+        [id]
+      );
+      if (rows.length > 0) {
+        foundTenant = t.tenant_db_name;
+        break;
+      }
+    }
+
+    if (!foundTenant) {
+      return res.redirect(`${frontendUrl}/confirmar-cita/${id}?error=not_found`);
+    }
+
+    await db.query(
+      `UPDATE \`${foundTenant}\`.appointments SET status = 'confirmed', updated_at = NOW() WHERE id = ?`,
+      [id]
+    );
+
+    // --- NOTIFICACIÓN AL GESTOR ---
+    try {
+      const [aptInfo] = await db.query<RowDataPacket[]>(
+        `SELECT a.title, c.first_name, c.last_name FROM \`${foundTenant}\`.appointments a 
+         JOIN \`${foundTenant}\`.customers c ON a.customer_id = c.id WHERE a.id = ?`, [id]
+      );
+      const customerName = aptInfo[0] ? `${aptInfo[0].first_name} ${aptInfo[0].last_name}` : 'Cliente';
+      const aptTitle = aptInfo[0]?.title || 'Cita';
+
+      await createSystemNotification(foundTenant, {
+        type: 'appointment_confirmed',
+        title: 'Cita Confirmada ✅',
+        message: `${customerName} ha confirmado su cita para "${aptTitle}" vía email.`,
+        metadata: { appointment_id: id, source: 'email' }
+      });
+    } catch (err) {
+      console.error('Error creating system notification:', err);
+    }
+
+    // Redirigir al frontend con confirmación exitosa
+    res.redirect(`${frontendUrl}/confirmar-cita/${id}?confirmed=true`);
+  } catch (error) {
+    console.error('Error confirming appointment via GET:', error);
+    res.redirect(`${frontendUrl}/confirmar-cita/${id}?error=server`);
   }
 }
 
