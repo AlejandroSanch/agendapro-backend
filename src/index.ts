@@ -16,6 +16,8 @@ import { publicRouter } from './routes/public.routes';
 import { categoriesRouter } from './routes/categories.routes';
 import { productsRouter } from './routes/products.routes';
 import { salesRouter } from './routes/sales.routes';
+import { inventoryRouter } from './routes/inventory.routes';
+import { notificationsRouter } from './routes/notifications.routes';
 import { globalErrorHandler } from './middleware/error.middleware';
 import cron from 'node-cron';
 import { runRemindersJob, printTestConfirmationLinks } from './jobs/appointmentReminders';
@@ -60,6 +62,8 @@ app.use('/api/public', publicRouter);
 app.use('/api/categories', categoriesRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/sales', salesRouter);
+app.use('/api/inventory', inventoryRouter);
+app.use('/api/notifications', notificationsRouter);
 
 app.use(globalErrorHandler);
 
@@ -79,8 +83,8 @@ async function bootstrap(): Promise<void> {
     }
 
     app.listen(env.port, '0.0.0.0', () => {
-      console.log(`AgendaPro backend listening on http://0.0.0.0:${env.port}`);
-      console.log(`Local network access: http://192.168.0.14:${env.port}`);
+      console.log(`AgendaPro backend listening on all interfaces at port ${env.port}`);
+      console.log(`- Local: http://localhost:${env.port}`);
     });
   } catch (error) {
     console.error('No se pudo inicializar la base de datos MySQL.');
@@ -90,3 +94,4 @@ async function bootstrap(): Promise<void> {
 }
 
 void bootstrap();
+ 
