@@ -12,7 +12,8 @@ export type ModuleId =
   | 'personal'
   | 'inventario'
   | 'fidelizacion'
-  | 'comisiones';
+  | 'comisiones'
+  | 'sucursales';
 
 export interface UserPublic {
   id: string;
