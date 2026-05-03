@@ -21,13 +21,20 @@ export function issueAccessToken(userId: string, email: string): string {
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  let token = '';
   const authorization = req.headers.authorization;
-  if (!authorization?.startsWith('Bearer ')) {
+  if (authorization?.startsWith('Bearer ')) {
+    token = authorization.slice('Bearer '.length).trim();
+  } else if (req.query.token && typeof req.query.token === 'string') {
+    token = req.query.token;
+  }
+
+  if (!token) {
     res.status(401).json({ error: 'Token requerido.' });
     return;
   }
 
-  const token = authorization.slice('Bearer '.length).trim();
+
   try {
     const payload = jwt.verify(token, env.jwtSecret) as AuthTokenPayload;
     const user = await findUserById(payload.sub);
@@ -38,7 +45,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     req.user = sanitizeUser(user);
     next();
-  } catch {
+  } catch (err: any) {
+    require('fs').appendFileSync('debug_auth.log', `[${new Date().toISOString()}] Auth failed: ${err.message || 'Unknown error'}\n`);
     res.status(401).json({ error: 'Token invalido o expirado.' });
   }
 }

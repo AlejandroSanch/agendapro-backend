@@ -17,6 +17,7 @@ import {
 } from '../validators/appointments.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
+import { SseManager } from '../utils/sse.manager';
 
 type CitaEstado = 'pendiente' | 'confirmada' | 'completada' | 'cancelada';
 
@@ -55,6 +56,20 @@ function toApiAppointment(appointment: any) {
 }
 
 export const AppointmentsController = {
+  stream: asyncWrapper(async (req: Request, res: Response) => {
+    if (!req.user) throw new ApiError(401, 'No autorizado.');
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    // Send initial connection successful message
+    res.write('data: {"status": "connected"}\n\n');
+
+    SseManager.addClient(req.user.id, res);
+  }),
+
   list: asyncWrapper(async (req: Request, res: Response) => {
     if (!req.user) throw new ApiError(401, 'No autorizado.');
     
@@ -133,7 +148,11 @@ export const AppointmentsController = {
     try {
       const appointment = await createAppointment(req.user.id, payload);
       if (!appointment) throw new ApiError(500, 'No se pudo crear la cita.');
-      res.status(201).json({ appointment: toApiAppointment(appointment) });
+      
+      const apiAppointment = toApiAppointment(appointment);
+      SseManager.broadcast(req.user.id, 'appointments_updated', { action: 'create', appointment: apiAppointment });
+      
+      res.status(201).json({ appointment: apiAppointment });
     } catch (error) {
       if (error instanceof Error && error.message.includes('fecha futura')) {
         throw new ApiError(400, error.message);
@@ -162,7 +181,11 @@ export const AppointmentsController = {
     try {
       const appointment = await updateAppointment(req.user.id, params.id, payload);
       if (!appointment) throw new ApiError(404, 'Cita no encontrada.');
-      res.json({ appointment: toApiAppointment(appointment) });
+      
+      const apiAppointment = toApiAppointment(appointment);
+      SseManager.broadcast(req.user.id, 'appointments_updated', { action: 'update', appointment: apiAppointment });
+      
+      res.json({ appointment: apiAppointment });
     } catch (error) {
       if (error instanceof Error && error.message.includes('fecha futura')) {
         throw new ApiError(400, error.message);
