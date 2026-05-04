@@ -140,6 +140,7 @@ export async function printTestConfirmationLinks() {
         FROM \`${user.tenant_db_name}\`.appointments a
         JOIN \`${user.tenant_db_name}\`.customers c ON a.customer_id = c.id
         WHERE a.status = 'scheduled'
+          AND a.start_at >= NOW()
         ORDER BY a.start_at ASC
         LIMIT 3
       `);

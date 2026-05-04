@@ -10,7 +10,8 @@ export function globalErrorHandler(
 ): void {
   // Manejo elegante de Validación en Zod
   if (err instanceof z.ZodError) {
-    res.status(400).json({ error: (err as any).errors[0].message });
+    const message = err.issues?.[0]?.message || (err as any).errors?.[0]?.message || err.message;
+    res.status(400).json({ error: message });
     return;
   }
 

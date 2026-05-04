@@ -1,3 +1,4 @@
+// Forced reload for inventory fix
 import { randomUUID } from 'crypto';
 import { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { getControlPool } from '../db';
@@ -7,8 +8,10 @@ import { getTenantDbNameByUserId } from './user.repository';
 export interface ProductRecord {
   id: string;
   supplierId: string | null;
+  categoryId: string | null;
   sku: string | null;
   name: string;
+  unit: string;
   priceCents: number;
   costCents: number;
   stockQuantity: number;
@@ -18,8 +21,10 @@ export interface ProductRecord {
 
 export interface CreateProductInput {
   supplierId?: string | null;
+  categoryId?: string | null;
   sku?: string | null;
   name: string;
+  unit?: string;
   priceCents: number;
   costCents?: number;
   stockQuantity?: number;
@@ -32,8 +37,10 @@ export type UpdateProductInput = Partial<CreateProductInput>;
 interface TenantProductRow extends RowDataPacket {
   id: string;
   supplier_id: string | null;
+  category_id: string | null;
   sku: string | null;
   name: string;
+  unit: string;
   price_cents: number;
   cost_cents: number;
   stock_quantity: number;
@@ -48,9 +55,8 @@ export async function listProducts(userId: string): Promise<ProductRecord[]> {
   const db = getControlPool();
   const [rows] = await db.query<TenantProductRow[]>(
     `
-      SELECT id, supplier_id, sku, name, price_cents, cost_cents, stock_quantity, reorder_alert_level, is_active
+      SELECT id, supplier_id, category_id, sku, name, unit, price_cents, cost_cents, stock_quantity, reorder_alert_level, is_active
       FROM ${q(tenantDbName)}.products
-      WHERE is_active = 1
       ORDER BY name ASC
     `
   );
@@ -71,15 +77,17 @@ export async function createProduct(
   await db.query(
     `
       INSERT INTO ${q(tenantDbName)}.products (
-        id, supplier_id, sku, name, price_cents, cost_cents, stock_quantity, reorder_alert_level, is_active
+        id, supplier_id, category_id, sku, name, unit, price_cents, cost_cents, stock_quantity, reorder_alert_level, is_active
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       productId,
       input.supplierId ?? null,
+      input.categoryId ?? null,
       input.sku ?? null,
       input.name,
+      input.unit ?? 'pieza',
       input.priceCents,
       input.costCents ?? 0,
       input.stockQuantity ?? 0,
@@ -105,8 +113,10 @@ export async function updateProduct(
   const values: any[] = [];
 
   if (input.supplierId !== undefined) { fields.push('supplier_id = ?'); values.push(input.supplierId); }
+  if (input.categoryId !== undefined) { fields.push('category_id = ?'); values.push(input.categoryId); }
   if (input.sku !== undefined) { fields.push('sku = ?'); values.push(input.sku); }
   if (input.name !== undefined) { fields.push('name = ?'); values.push(input.name); }
+  if (input.unit !== undefined) { fields.push('unit = ?'); values.push(input.unit); }
   if (input.priceCents !== undefined) { fields.push('price_cents = ?'); values.push(input.priceCents); }
   if (input.costCents !== undefined) { fields.push('cost_cents = ?'); values.push(input.costCents); }
   if (input.stockQuantity !== undefined) { fields.push('stock_quantity = ?'); values.push(input.stockQuantity); }
@@ -143,12 +153,65 @@ function toProductRecord(row: TenantProductRow): ProductRecord {
   return {
     id: row.id,
     supplierId: row.supplier_id,
+    categoryId: row.category_id,
     sku: row.sku,
     name: row.name,
+    unit: row.unit,
     priceCents: row.price_cents,
     costCents: row.cost_cents,
     stockQuantity: row.stock_quantity,
     reorderAlertLevel: row.reorder_alert_level,
     isActive: row.is_active === 1,
   };
+}
+
+export async function createProductsBulk(
+  userId: string,
+  inputs: CreateProductInput[]
+): Promise<number> {
+  if (inputs.length === 0) return 0;
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return 0;
+
+  const db = getControlPool();
+  
+  const values = inputs.map(input => [
+    `prod_${randomUUID()}`,
+    input.supplierId ?? null,
+    input.categoryId ?? null,
+    input.sku ?? null,
+    input.name,
+    input.unit ?? 'pieza',
+    input.priceCents,
+    input.costCents ?? 0,
+    input.stockQuantity ?? 0,
+    input.reorderAlertLevel ?? 0,
+    input.isActive ?? true ? 1 : 0,
+  ]);
+
+  const [result] = await db.query<ResultSetHeader>(
+    `
+      INSERT INTO ${q(tenantDbName)}.products (
+        id, supplier_id, category_id, sku, name, unit, price_cents, cost_cents, stock_quantity, reorder_alert_level, is_active
+      )
+      VALUES ?
+    `,
+    [values]
+  );
+
+  return result.affectedRows;
+}
+
+export async function deleteProduct(userId: string, productId: string): Promise<boolean> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return false;
+
+  const db = getControlPool();
+
+  const [result] = await db.query<ResultSetHeader>(
+    `DELETE FROM ${q(tenantDbName)}.products WHERE id = ?`,
+    [productId]
+  );
+
+  return result.affectedRows > 0;
 }

@@ -40,4 +40,7 @@ export const env = {
   smtpUser: process.env.SMTP_USER || '',
   smtpPass: process.env.SMTP_PASS || '',
   smtpFromEmail: process.env.SMTP_FROM_EMAIL || 'no-reply@agendapro.com',
+  googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+  googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:4000/api/integrations/google/callback',
 };

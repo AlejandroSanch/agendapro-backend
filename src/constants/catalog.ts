@@ -109,6 +109,15 @@ export const ALL_MODULES: AppModule[] = [
     color: '#059669',
     bgColor: '#ECFDF5',
   },
+  {
+    id: 'sucursales',
+    label: 'Multi-sucursal',
+    icon: 'briefcase',
+    description: 'Gestion global de sedes, comparativas y reportes consolidados.',
+    route: '/dashboard/sucursales',
+    color: '#6366f1',
+    bgColor: '#eef2ff',
+  },
 ];
 
 const ALL_MODULE_IDS: ModuleId[] = ALL_MODULES.map(m => m.id as ModuleId);

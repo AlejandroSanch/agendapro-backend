@@ -18,6 +18,7 @@ import {
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
 import { SseManager } from '../utils/sse.manager';
+import { GoogleCalendarService } from '../services/google-calendar.service';
 
 type CitaEstado = 'pendiente' | 'confirmada' | 'completada' | 'cancelada';
 
@@ -152,6 +153,9 @@ export const AppointmentsController = {
       const apiAppointment = toApiAppointment(appointment);
       SseManager.broadcast(req.user.id, 'appointments_updated', { action: 'create', appointment: apiAppointment });
       
+      // Sincronizar asincrónicamente con Google Calendar
+      GoogleCalendarService.pushEvent(req.user.id, apiAppointment as any, 'create').catch(console.error);
+
       res.status(201).json({ appointment: apiAppointment });
     } catch (error) {
       if (error instanceof Error && error.message.includes('fecha futura')) {
@@ -185,6 +189,9 @@ export const AppointmentsController = {
       const apiAppointment = toApiAppointment(appointment);
       SseManager.broadcast(req.user.id, 'appointments_updated', { action: 'update', appointment: apiAppointment });
       
+      const googleAction = apiAppointment.estado === 'cancelada' ? 'delete' : 'update';
+      GoogleCalendarService.pushEvent(req.user.id, apiAppointment as any, googleAction).catch(console.error);
+
       res.json({ appointment: apiAppointment });
     } catch (error) {
       if (error instanceof Error && error.message.includes('fecha futura')) {

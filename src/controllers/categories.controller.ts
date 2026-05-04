@@ -10,6 +10,7 @@ import {
   createCategorySchema,
   updateCategorySchema,
   categoryIdParamSchema,
+  listCategoryQuerySchema,
 } from '../validators/categories.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
@@ -18,7 +19,8 @@ export const CategoriesController = {
   list: asyncWrapper(async (req: Request, res: Response) => {
     if (!req.user) throw new ApiError(401, 'No autorizado.');
 
-    const categories = await listCategories(req.user.id);
+    const query = listCategoryQuerySchema.parse(req.query);
+    const categories = await listCategories(req.user.id, query.type);
     res.json({ categories });
   }),
 
@@ -27,13 +29,21 @@ export const CategoriesController = {
 
     const data = createCategorySchema.parse(req.body);
 
-    const created = await createCategory(req.user.id, {
-      name: data.nombre,
-      description: data.descripcion,
-    });
+    try {
+      const created = await createCategory(req.user.id, {
+        name: data.nombre,
+        description: data.descripcion,
+        type: data.type,
+      });
 
-    if (!created) throw new ApiError(404, 'Usuario no encontrado.');
-    res.status(201).json({ category: created });
+      if (!created) throw new ApiError(404, 'Usuario no encontrado.');
+      res.status(201).json({ category: created });
+    } catch (error: any) {
+      if (error.code === 'ER_DUP_ENTRY') {
+        throw new ApiError(400, 'Ya existe una categoría con ese nombre.');
+      }
+      throw error;
+    }
   }),
 
   update: asyncWrapper(async (req: Request, res: Response) => {
@@ -42,10 +52,12 @@ export const CategoriesController = {
     const params = categoryIdParamSchema.parse(req.params);
     const data = updateCategorySchema.parse(req.body);
 
-    const updated = await updateCategory(req.user.id, params.id, {
-      name: data.nombre,
-      description: data.descripcion,
-    });
+    const payload: any = {};
+    if (data.nombre !== undefined) payload.name = data.nombre;
+    if (data.descripcion !== undefined) payload.description = data.descripcion;
+    if (data.type !== undefined) payload.type = data.type;
+
+    const updated = await updateCategory(req.user.id, params.id, payload);
 
     if (!updated) throw new ApiError(404, 'Categoria no encontrada.');
     res.json({ category: updated });
@@ -61,7 +73,7 @@ export const CategoriesController = {
       if (!deleted) throw new ApiError(404, 'Categoria no encontrada.');
       res.json({ ok: true });
     } catch (error) {
-      if (error instanceof Error && error.message.includes('servicios asociados')) {
+      if (error instanceof Error && (error.message.includes('servicios asociados') || error.message.includes('productos asociados'))) {
         throw new ApiError(409, error.message);
       }
       throw error;

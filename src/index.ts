@@ -18,6 +18,7 @@ import { productsRouter } from './routes/products.routes';
 import { salesRouter } from './routes/sales.routes';
 import { inventoryRouter } from './routes/inventory.routes';
 import { notificationsRouter } from './routes/notifications.routes';
+import { integrationsRouter } from './routes/integrations.routes';
 import { globalErrorHandler } from './middleware/error.middleware';
 import cron from 'node-cron';
 import { runRemindersJob, printTestConfirmationLinks } from './jobs/appointmentReminders';
@@ -64,6 +65,7 @@ app.use('/api/products', productsRouter);
 app.use('/api/sales', salesRouter);
 app.use('/api/inventory', inventoryRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/integrations', integrationsRouter);
 
 app.use(globalErrorHandler);
 
@@ -73,14 +75,6 @@ async function bootstrap(): Promise<void> {
     
     // Start cron jobs
     cron.schedule('0 * * * *', runRemindersJob); // Runs at minute 0 past every hour
-    
-    // To make sure it works straight away or test it without waiting an hour
-    if (process.env.NODE_ENV !== 'production') {
-      setTimeout(() => {
-        printTestConfirmationLinks().catch(console.error);
-        runRemindersJob().catch(console.error);
-      }, 5000); // 5 seconds after boot up
-    }
 
     app.listen(env.port, '0.0.0.0', () => {
       console.log(`AgendaPro backend listening on all interfaces at port ${env.port}`);

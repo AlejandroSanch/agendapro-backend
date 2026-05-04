@@ -6,24 +6,17 @@ let transporter: nodemailer.Transporter | null = null;
 export async function getTransporter() {
   if (transporter) return transporter;
 
-  let host = env.smtpHost;
-  let port = env.smtpPort;
-  let user = env.smtpUser;
-  let pass = env.smtpPass;
+  const host = env.smtpHost;
+  const port = env.smtpPort;
+  const user = env.smtpUser;
+  const pass = env.smtpPass;
 
-  // Si no hay configuración real proporcionada, usa una cuenta de prueba descartable en dev/test
   if (!user || !pass) {
-    console.log('No SMTP config provided in .env, falling back to ethereal test account...');
-    try {
-      const testAccount = await nodemailer.createTestAccount();
-      host = 'smtp.ethereal.email';
-      port = 587;
-      user = testAccount.user;
-      pass = testAccount.pass;
-    } catch (err) {
-      console.error('Failed to create ethereal test account:', err);
-    }
+    console.warn('⚠️ SMTP credentials not configured in .env — emails will NOT be sent.');
+    console.warn('   Set SMTP_USER and SMTP_PASS to enable email delivery.');
   }
+
+  console.log(`📧 Initializing SMTP transporter → ${host}:${port} (secure: ${port === 465})`);
 
   transporter = nodemailer.createTransport({
     host,
@@ -54,11 +47,7 @@ export async function sendMail(
       html,
     });
     
-    console.log(`📩 Email sent successfully to ${to}`);
-    // Ethereal proporciona una URL para ver los emails falsos enviados en el navegador
-    if (info.messageId) {
-       console.log('Preview URL: %s', nodemailer.getTestMessageUrl(info));
-    }
+    console.log(`📩 Email sent successfully to ${to} (messageId: ${info.messageId})`);
   } catch (error) {
     console.error(`❌ Error sending email to ${to}:`, error);
     throw error;
