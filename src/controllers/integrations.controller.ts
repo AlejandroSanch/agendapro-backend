@@ -39,5 +39,17 @@ export const IntegrationsController = {
     );
 
     res.json({ integrations: rows });
+  }),
+
+  disconnectGoogle: asyncWrapper(async (req: Request, res: Response) => {
+    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    
+    const db = require('../data/db').getControlPool();
+    await db.query(
+      `DELETE FROM tenant_integrations WHERE user_id = ? AND provider = 'google_calendar'`,
+      [req.user.id]
+    );
+
+    res.json({ success: true, message: 'Integración desconectada correctamente.' });
   })
 };
