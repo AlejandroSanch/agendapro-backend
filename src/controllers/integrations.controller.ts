@@ -25,6 +25,19 @@ export const IntegrationsController = {
     await GoogleCalendarService.handleCallback(code, userId);
 
     // Redirigir de vuelta al frontend (Settings page)
-    res.redirect(`${env.frontendBaseUrl}/dashboard/settings`);
+    res.redirect(`${env.frontendBaseUrl}/dashboard/configuracion`);
+  }),
+
+  getStatus: asyncWrapper(async (req: Request, res: Response) => {
+    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    
+    // Obtener todas las integraciones activas del usuario
+    const db = require('../data/db').getControlPool();
+    const [rows] = await db.query(
+      `SELECT provider, expires_at FROM tenant_integrations WHERE user_id = ?`,
+      [req.user.id]
+    );
+
+    res.json({ integrations: rows });
   })
 };

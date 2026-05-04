@@ -6,3 +6,5 @@ export const integrationsRouter = Router();
 
 integrationsRouter.get('/google/auth', requireAuth, IntegrationsController.getGoogleAuthUrl);
 integrationsRouter.get('/google/callback', IntegrationsController.googleCallback);
+
+integrationsRouter.get('/status', requireAuth, IntegrationsController.getStatus);
