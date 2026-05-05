@@ -44,6 +44,9 @@ export const StaffController = {
         especialidades: data.especialidades,
         horarioPropio: data.horarioPropio,
         horario: data.horario,
+        descansoPropio: data.descansoPropio,
+        descansoDesde: data.descansoDesde,
+        descansoHasta: data.descansoHasta,
         activo: data.activo,
       });
 
@@ -60,6 +63,8 @@ export const StaffController = {
 
     const params = staffIdParamSchema.parse(req.params);
     const data = updateStaffSchema.parse(req.body);
+
+    console.log('Update Staff Data Received:', JSON.stringify(data, null, 2));
 
     try {
       const updated = await updateStaff(req.user.id, params.id, data);

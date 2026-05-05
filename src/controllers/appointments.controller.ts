@@ -8,6 +8,7 @@ import {
   getBusinessSettings, 
   isHolidayClosure 
 } from '../data/repositories/settings.repository';
+import { listStaff } from '../data/repositories/staff.repository';
 import { AppointmentStatusDb } from '../data/utils';
 import {
   appointmentIdParamSchema,
@@ -53,6 +54,7 @@ function toApiAppointment(appointment: any) {
     precio: appointment.priceCents / 100,
     notas: appointment.notes,
     estado: statusFromDb[appointment.status as AppointmentStatusDb],
+    trabajador: appointment.trabajador,
   };
 }
 
@@ -132,6 +134,38 @@ export const AppointmentsController = {
       if (startMinCurrent < openMin || endMinCurrent > closeMin) {
         throw new ApiError(400, `La duración de la cita excede el horario comercial (${schedule.from} - ${schedule.to}).`);
       }
+
+      // 4. Verificar horas de descanso (Break Time)
+      let breakStart: string | null = null;
+      let breakEnd: string | null = null;
+
+      if (data.trabajador) {
+        const staffList = await listStaff(req.user.id);
+        const staffMember = staffList.find(
+          s => s.nombre.toLowerCase().trim().replace(/\s+/g, ' ') === data.trabajador?.toLowerCase().trim().replace(/\s+/g, ' ')
+        );
+        if (staffMember?.descansoPropio) {
+          breakStart = staffMember.descansoDesde;
+          breakEnd = staffMember.descansoHasta;
+        } else if (settings.breakEnabled) {
+          breakStart = settings.breakStart;
+          breakEnd = settings.breakEnd;
+        }
+      } else if (settings.breakEnabled) {
+        breakStart = settings.breakStart;
+        breakEnd = settings.breakEnd;
+      }
+
+      if (breakStart && breakEnd) {
+        const breakStartMin = toMinutes(breakStart);
+        const breakEndMin = toMinutes(breakEnd);
+        if (breakStartMin !== null && breakEndMin !== null) {
+          // Si la cita empieza antes de que termine el descanso, y termina después de que empiece el descanso
+          if (startMinCurrent < breakEndMin && endMinCurrent > breakStartMin) {
+            throw new ApiError(400, `La cita coincide con el horario de descanso de ${breakStart} a ${breakEnd}.`);
+          }
+        }
+      }
     }
 
     const payload = {
@@ -144,6 +178,7 @@ export const AppointmentsController = {
       time: data.hora,
       notes: data.notas,
       status: statusToDb[data.estado as CitaEstado],
+      trabajador: data.trabajador,
     };
 
     try {
@@ -181,6 +216,57 @@ export const AppointmentsController = {
     if (data.hora !== undefined) payload.time = data.hora;
     if (data.notas !== undefined) payload.notes = data.notas;
     if (data.estado !== undefined) payload.status = statusToDb[data.estado as CitaEstado];
+    if (data.trabajador !== undefined) payload.trabajador = data.trabajador;
+
+    // Obtener la cita actual para combinar los datos y poder validarla
+    const appointmentsCurrent = await listAppointments(req.user.id);
+    const currentApt = appointmentsCurrent.find(a => a.id === params.id);
+    if (!currentApt) throw new ApiError(404, 'Cita no encontrada.');
+
+    const mergedDate = data.fecha ?? currentApt.date;
+    const mergedTime = data.hora ?? currentApt.time;
+    const mergedDuration = data.duracionMin ?? currentApt.durationMin;
+    const mergedTrabajador = data.trabajador ?? currentApt.trabajador;
+
+    const toMinutes = (timeStr: string) => {
+      const [h, m] = String(timeStr || '').split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    };
+
+    const startMinCurrent = toMinutes(mergedTime);
+    const endMinCurrent = startMinCurrent + mergedDuration;
+
+    const settings = await getBusinessSettings(req.user.id);
+    if (settings) {
+      let breakStart: string | null = null;
+      let breakEnd: string | null = null;
+
+      if (mergedTrabajador) {
+        const staffList = await listStaff(req.user.id);
+        const staffMember = staffList.find(
+          s => s.nombre.toLowerCase().trim().replace(/\s+/g, ' ') === mergedTrabajador?.toLowerCase().trim().replace(/\s+/g, ' ')
+        );
+        if (staffMember?.descansoPropio) {
+          breakStart = staffMember.descansoDesde;
+          breakEnd = staffMember.descansoHasta;
+        } else if (settings.breakEnabled) {
+          breakStart = settings.breakStart;
+          breakEnd = settings.breakEnd;
+        }
+      } else if (settings.breakEnabled) {
+        breakStart = settings.breakStart;
+        breakEnd = settings.breakEnd;
+      }
+
+      if (breakStart && breakEnd) {
+        const breakStartMin = toMinutes(breakStart);
+        const breakEndMin = toMinutes(breakEnd);
+        // Si la cita empieza antes de que termine el descanso, y termina después de que empiece el descanso
+        if (startMinCurrent < breakEndMin && endMinCurrent > breakStartMin) {
+          throw new ApiError(400, `La cita coincide con el horario de descanso de ${breakStart} a ${breakEnd}.`);
+        }
+      }
+    }
 
     try {
       const appointment = await updateAppointment(req.user.id, params.id, payload);

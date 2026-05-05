@@ -45,6 +45,9 @@ export const OnboardingController = {
       zipCode:      data.zipCode,
       logoUrl:      data.logoUrl,
       schedules:    data.schedules as any,
+      breakEnabled: data.breakEnabled,
+      breakStart:   data.breakStart,
+      breakEnd:     data.breakEnd,
     });
 
     res.json({ settings });

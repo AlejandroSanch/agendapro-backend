@@ -20,7 +20,8 @@ export const createAppointmentSchema = z.object({
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'fecha invalida. Usa YYYY-MM-DD.'),
   hora: z.string().regex(/^\d{2}:\d{2}$/, 'hora invalida. Usa HH:mm.'),
   notas: z.string().trim().optional().default(''),
-  estado: z.enum(['pendiente', 'confirmada', 'completada', 'cancelada'], { message: 'estado inválido.' })
+  estado: z.enum(['pendiente', 'confirmada', 'completada', 'cancelada'], { message: 'estado inválido.' }),
+  trabajador: z.string().trim().optional().default('')
 });
 
 export const updateAppointmentSchema = z.object({
@@ -32,7 +33,8 @@ export const updateAppointmentSchema = z.object({
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'fecha invalida. Usa YYYY-MM-DD.').optional(),
   hora: z.string().regex(/^\d{2}:\d{2}$/, 'hora invalida. Usa HH:mm.').optional(),
   notas: z.string().trim().optional(),
-  estado: z.enum(['pendiente', 'confirmada', 'completada', 'cancelada'], { message: 'estado inválido.' }).optional()
+  estado: z.enum(['pendiente', 'confirmada', 'completada', 'cancelada'], { message: 'estado inválido.' }).optional(),
+  trabajador: z.string().trim().optional()
 }).refine(data => Object.keys(data).length > 0, {
   message: 'No hay campos para actualizar.'
 });

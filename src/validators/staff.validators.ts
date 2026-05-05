@@ -22,6 +22,9 @@ export const createStaffSchema = z.object({
   especialidades: z.array(z.string().trim()).optional().default([]),
   horarioPropio: z.boolean().optional().default(false),
   horario: z.array(staffScheduleDaySchema).optional().default([]),
+  descansoPropio: z.boolean().optional().default(false),
+  descansoDesde: z.string().trim().regex(/^\d{2}:\d{2}$/, 'Formato HH:MM requerido.').nullable().optional(),
+  descansoHasta: z.string().trim().regex(/^\d{2}:\d{2}$/, 'Formato HH:MM requerido.').nullable().optional(),
   activo: z.boolean().optional().default(true),
 });
 
@@ -33,6 +36,9 @@ export const updateStaffSchema = z.object({
   especialidades: z.array(z.string().trim()).optional(),
   horarioPropio: z.boolean().optional(),
   horario: z.array(staffScheduleDaySchema).optional(),
+  descansoPropio: z.boolean().optional(),
+  descansoDesde: z.string().trim().regex(/^\d{2}:\d{2}$/, 'Formato HH:MM requerido.').nullable().optional(),
+  descansoHasta: z.string().trim().regex(/^\d{2}:\d{2}$/, 'Formato HH:MM requerido.').nullable().optional(),
   activo: z.boolean().optional(),
 }).refine(data => Object.keys(data).length > 0, {
   message: 'No hay campos para actualizar.',

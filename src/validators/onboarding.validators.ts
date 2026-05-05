@@ -22,7 +22,10 @@ export const patchBusinessSettingsSchema = z.object({
       from: z.string(),
       to: z.string()
     })
-  ).optional()
+  ).optional(),
+  breakEnabled: z.boolean().optional(),
+  breakStart: z.string().nullable().optional(),
+  breakEnd: z.string().nullable().optional(),
 });
 
 export const onboardingServicesSchema = z.object({

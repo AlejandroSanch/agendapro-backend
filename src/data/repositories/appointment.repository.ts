@@ -25,6 +25,7 @@ export interface AppointmentRecord {
   time: string;
   notes: string;
   status: AppointmentStatusDb;
+  trabajador: string;
 }
 
 export interface UpsertAppointmentInput {
@@ -37,6 +38,7 @@ export interface UpsertAppointmentInput {
   time: string;
   notes?: string;
   status: AppointmentStatusDb;
+  trabajador?: string;
 }
 
 export type UpdateAppointmentInput = Partial<UpsertAppointmentInput>;
@@ -51,6 +53,7 @@ interface AppointmentJoinedRow extends RowDataPacket {
   service_name: string;
   service_duration_minutes: number;
   service_price_cents: number;
+  staff_name: string | null;
 }
 
 interface IdRow extends RowDataPacket {
@@ -85,11 +88,13 @@ export async function listAppointments(
       SELECT
         a.id, a.status, DATE_FORMAT(a.start_at, '%Y-%m-%d %H:%i:%s') AS start_at, a.notes,
         CONCAT(c.first_name, ' ', c.last_name) AS customer_name, c.phone AS customer_phone,
-        s.name AS service_name, s.duration_minutes AS service_duration_minutes, s.price_cents AS service_price_cents
+        s.name AS service_name, s.duration_minutes AS service_duration_minutes, s.price_cents AS service_price_cents,
+        CONCAT(st.first_name, ' ', st.last_name) AS staff_name
       FROM ${q(tenantDbName)}.appointments a
       INNER JOIN ${q(tenantDbName)}.customers c ON c.id = a.customer_id
       LEFT JOIN ${q(tenantDbName)}.appointment_services aserv ON aserv.appointment_id = a.id
       LEFT JOIN ${q(tenantDbName)}.services s ON s.id = aserv.service_id
+      LEFT JOIN ${q(tenantDbName)}.staff st ON st.id = aserv.staff_id
       ${whereClause}
       ORDER BY a.start_at ASC
     `,
@@ -136,11 +141,26 @@ export async function createAppointment(
 
     const appointmentId = `apt_${randomUUID()}`;
 
-    const [staffRows] = await connection.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.staff LIMIT 1`);
-    const defaultStaffId = staffRows[0]?.id || 'stf_placeholder';
-    if (!staffRows[0]) {
-      await connection.query(`INSERT IGNORE INTO ${q(tenantDbName)}.roles (id, name) VALUES ('rl_admin', 'Admin')`);
-      await connection.query(`INSERT IGNORE INTO ${q(tenantDbName)}.staff (id, role_id, first_name, last_name, is_active, created_at, updated_at) VALUES (?, 'rl_admin', 'Sin', 'Asignar', 1, NOW(), NOW())`, [defaultStaffId]);
+    let staffId = 'stf_placeholder';
+    if (normalized.trabajador) {
+      const normalizedStaffName = normalized.trabajador.trim().toLowerCase().replace(/\s+/g, ' ');
+      const [staffRows] = await connection.query<IdRow[]>(
+        `SELECT id FROM ${q(tenantDbName)}.staff WHERE LOWER(CONCAT(first_name, ' ', last_name)) = ? LIMIT 1`,
+        [normalizedStaffName]
+      );
+      if (staffRows[0]?.id) {
+        staffId = staffRows[0].id;
+      }
+    }
+    
+    // Si no se encontró o no se envió trabajador, usamos el primer staff
+    if (staffId === 'stf_placeholder') {
+      const [staffRows] = await connection.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.staff LIMIT 1`);
+      staffId = staffRows[0]?.id || 'stf_placeholder';
+      if (!staffRows[0]) {
+        await connection.query(`INSERT IGNORE INTO ${q(tenantDbName)}.roles (id, name) VALUES ('rl_admin', 'Admin')`);
+        await connection.query(`INSERT IGNORE INTO ${q(tenantDbName)}.staff (id, role_id, first_name, last_name, is_active, created_at, updated_at) VALUES (?, 'rl_admin', 'Sin', 'Asignar', 1, NOW(), NOW())`, [staffId]);
+      }
     }
 
     await connection.query(
@@ -158,7 +178,7 @@ export async function createAppointment(
 
     await connection.query(
       `INSERT INTO ${q(tenantDbName)}.appointment_services (id, appointment_id, service_id, staff_id) VALUES (?, ?, ?, ?)`,
-      [`asv_${randomUUID()}`, appointmentId, serviceId, defaultStaffId]
+      [`asv_${randomUUID()}`, appointmentId, serviceId, staffId]
     );
 
     await connection.commit();
@@ -193,6 +213,7 @@ export async function updateAppointment(
     time: input.time ?? current.time,
     notes: input.notes ?? current.notes,
     status: input.status ?? current.status,
+    trabajador: input.trabajador ?? current.trabajador,
   });
 
   const connection = await db.getConnection();
@@ -232,13 +253,33 @@ export async function updateAppointment(
     );
 
     // Update pivot
-    const [staffRows] = await connection.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.staff LIMIT 1`);
-    const defaultStaffId = staffRows[0]?.id || 'stf_placeholder';
+    let staffId = 'stf_placeholder';
+    if (merged.trabajador) {
+      const normalizedStaffName = merged.trabajador.trim().toLowerCase().replace(/\s+/g, ' ');
+      const [staffRows] = await connection.query<IdRow[]>(
+        `SELECT id FROM ${q(tenantDbName)}.staff WHERE LOWER(CONCAT(first_name, ' ', last_name)) = ? LIMIT 1`,
+        [normalizedStaffName]
+      );
+      if (staffRows[0]?.id) {
+        staffId = staffRows[0].id;
+      }
+    }
+    
+    // Si no se encontró, mantenemos el actual o asignamos el primero
+    if (staffId === 'stf_placeholder') {
+      const [currentStaffRows] = await connection.query<IdRow[]>(`SELECT staff_id as id FROM ${q(tenantDbName)}.appointment_services WHERE appointment_id = ? LIMIT 1`, [appointmentId]);
+      if (currentStaffRows[0]?.id) {
+         staffId = currentStaffRows[0].id;
+      } else {
+         const [staffRows] = await connection.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.staff LIMIT 1`);
+         staffId = staffRows[0]?.id || 'stf_placeholder';
+      }
+    }
     
     await connection.query(`DELETE FROM ${q(tenantDbName)}.appointment_services WHERE appointment_id = ?`, [appointmentId]);
     await connection.query(
       `INSERT INTO ${q(tenantDbName)}.appointment_services (id, appointment_id, service_id, staff_id) VALUES (?, ?, ?, ?)`,
-      [`asv_${randomUUID()}`, appointmentId, serviceId, defaultStaffId]
+      [`asv_${randomUUID()}`, appointmentId, serviceId, staffId]
     );
 
     if (!result.affectedRows) {
@@ -266,11 +307,13 @@ async function getAppointmentById(
       SELECT
         a.id, a.status, DATE_FORMAT(a.start_at, '%Y-%m-%d %H:%i:%s') AS start_at, a.notes,
         CONCAT(c.first_name, ' ', c.last_name) AS customer_name, c.phone AS customer_phone,
-        s.name AS service_name, s.duration_minutes AS service_duration_minutes, s.price_cents AS service_price_cents
+        s.name AS service_name, s.duration_minutes AS service_duration_minutes, s.price_cents AS service_price_cents,
+        CONCAT(st.first_name, ' ', st.last_name) AS staff_name
       FROM ${q(tenantDbName)}.appointments a
       INNER JOIN ${q(tenantDbName)}.customers c ON c.id = a.customer_id
       LEFT JOIN ${q(tenantDbName)}.appointment_services aserv ON aserv.appointment_id = a.id
       LEFT JOIN ${q(tenantDbName)}.services s ON s.id = aserv.service_id
+      LEFT JOIN ${q(tenantDbName)}.staff st ON st.id = aserv.staff_id
       WHERE a.id = ? LIMIT 1
     `,
     [appointmentId]
@@ -389,6 +432,7 @@ function normalizeUpsertAppointmentInput(input: UpsertAppointmentInput): UpsertA
     time: String(input.time || '').trim(),
     notes: String(input.notes || '').trim(),
     status: normalizeAppointmentStatus(input.status),
+    trabajador: String(input.trabajador || '').trim(),
   };
 }
 
@@ -406,6 +450,7 @@ function toAppointmentRecord(row: AppointmentJoinedRow): AppointmentRecord {
     time,
     notes: row.notes ?? '',
     status: normalizeAppointmentStatus(row.status),
+    trabajador: row.staff_name ?? '',
   };
 }
 

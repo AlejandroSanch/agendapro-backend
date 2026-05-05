@@ -17,6 +17,9 @@ export interface BusinessSettings {
   zipCode: string;
   logoUrl: string;
   schedules: BusinessSchedule[];
+  breakEnabled: boolean;
+  breakStart: string | null;
+  breakEnd: string | null;
 }
 
 export interface BusinessSchedule {
@@ -95,6 +98,9 @@ export async function getBusinessSettings(userId: string): Promise<BusinessSetti
     zipCode: row.zip_code ?? '',
     logoUrl: row.logo_url ?? '',
     schedules,
+    breakEnabled: row.break_enabled === 1,
+    breakStart: row.break_start ? String(row.break_start).substring(0, 5) : null,
+    breakEnd: row.break_end ? String(row.break_end).substring(0, 5) : null,
   };
 }
 
@@ -119,6 +125,9 @@ export async function upsertBusinessSettings(
     zipCode: '',
     logoUrl: '',
     schedules: [],
+    breakEnabled: false,
+    breakStart: null,
+    breakEnd: null,
   };
 
   const next = {
@@ -134,6 +143,9 @@ export async function upsertBusinessSettings(
     zipCode: input.zipCode ?? current.zipCode,
     logoUrl: input.logoUrl ?? current.logoUrl,
     schedules: input.schedules ?? current.schedules,
+    breakEnabled: input.breakEnabled ?? current.breakEnabled,
+    breakStart: input.breakStart !== undefined ? input.breakStart : current.breakStart,
+    breakEnd: input.breakEnd !== undefined ? input.breakEnd : current.breakEnd,
   };
 
   const connection = await db.getConnection();
@@ -143,8 +155,8 @@ export async function upsertBusinessSettings(
     await connection.query(
       `
         INSERT INTO ${q(tenantDbName)}.business_settings
-          (id, business_type, phone, address, street, ext_number, int_number, neighborhood, city, state, zip_code, logo_url, updated_at)
-        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+          (id, business_type, phone, address, street, ext_number, int_number, neighborhood, city, state, zip_code, logo_url, break_enabled, break_start, break_end, updated_at)
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         ON DUPLICATE KEY UPDATE
           business_type = VALUES(business_type),
           phone = VALUES(phone),
@@ -157,9 +169,18 @@ export async function upsertBusinessSettings(
           state = VALUES(state),
           zip_code = VALUES(zip_code),
           logo_url = VALUES(logo_url),
+          break_enabled = VALUES(break_enabled),
+          break_start = VALUES(break_start),
+          break_end = VALUES(break_end),
           updated_at = NOW()
       `,
-      [next.businessType, next.phone, next.address, next.street, next.extNumber, next.intNumber, next.neighborhood, next.city, next.state, next.zipCode, next.logoUrl]
+      [
+        next.businessType, next.phone, next.address, next.street, next.extNumber, next.intNumber,
+        next.neighborhood, next.city, next.state, next.zipCode, next.logoUrl,
+        next.breakEnabled ? 1 : 0,
+        next.breakStart ? next.breakStart + ':00' : null,
+        next.breakEnd ? next.breakEnd + ':00' : null,
+      ]
     );
 
     // Save Schedules to new table

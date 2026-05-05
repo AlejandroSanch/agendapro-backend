@@ -26,6 +26,9 @@ export interface StaffRecord {
   especialidades: string[];
   horarioPropio: boolean;
   horario: StaffScheduleDayRecord[];
+  descansoPropio: boolean;
+  descansoDesde: string | null;
+  descansoHasta: string | null;
   activo: boolean;
   initials: string;
   color: string;
@@ -39,6 +42,9 @@ export interface CreateStaffInput {
   especialidades?: string[];
   horarioPropio?: boolean;
   horario?: StaffScheduleDayRecord[];
+  descansoPropio?: boolean;
+  descansoDesde?: string | null;
+  descansoHasta?: string | null;
   activo?: boolean;
 }
 
@@ -54,6 +60,9 @@ interface StaffRow extends RowDataPacket {
   phone: string | null;
   is_active: number;
   has_custom_schedule: number;
+  has_custom_break: number;
+  break_start: string | null;
+  break_end: string | null;
   role_name: string;
 }
 
@@ -107,7 +116,9 @@ export async function listStaff(userId: string): Promise<StaffRecord[]> {
   const db = getControlPool();
   const [rows] = await db.query<StaffRow[]>(
     `
-      SELECT s.id, s.first_name, s.last_name, s.email, s.phone, s.is_active, s.has_custom_schedule, r.name AS role_name
+      SELECT s.id, s.first_name, s.last_name, s.email, s.phone, s.is_active, s.has_custom_schedule,
+             s.has_custom_break, s.break_start, s.break_end,
+             r.name AS role_name
       FROM ${q(tenantDbName)}.staff s
       JOIN ${q(tenantDbName)}.roles r ON r.id = s.role_id
       ORDER BY s.first_name ASC, s.last_name ASC
@@ -143,6 +154,7 @@ export async function createStaff(
     const roleId = ROLE_NAME_TO_ID[rol] ?? 'role_staff';
     const isActive = input.activo !== undefined ? input.activo : true;
     const hasCustomSchedule = input.horarioPropio ?? false;
+    const hasCustomBreak = input.descansoPropio ?? false;
 
     for (let attempt = 0; attempt < 5; attempt++) {
       const staffId = `stf_${randomUUID()}`;
@@ -151,9 +163,10 @@ export async function createStaff(
         await connection.query(
           `
             INSERT INTO ${q(tenantDbName)}.staff (
-              id, role_id, first_name, last_name, email, phone, is_active, has_custom_schedule, created_at, updated_at
+              id, role_id, first_name, last_name, email, phone, is_active, has_custom_schedule,
+              has_custom_break, break_start, break_end, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
           `,
           [
             staffId,
@@ -164,6 +177,9 @@ export async function createStaff(
             input.telefono?.trim() || null,
             isActive ? 1 : 0,
             hasCustomSchedule ? 1 : 0,
+            hasCustomBreak ? 1 : 0,
+            input.descansoDesde ? input.descansoDesde + ':00' : null,
+            input.descansoHasta ? input.descansoHasta + ':00' : null,
           ]
         );
 
@@ -257,6 +273,21 @@ export async function updateStaff(
       params.push(input.horarioPropio ? 1 : 0);
     }
 
+    if (input.descansoPropio !== undefined) {
+      sets.push('has_custom_break = ?');
+      params.push(input.descansoPropio ? 1 : 0);
+    }
+
+    if (input.descansoDesde !== undefined) {
+      sets.push('break_start = ?');
+      params.push(input.descansoDesde ? input.descansoDesde + ':00' : null);
+    }
+
+    if (input.descansoHasta !== undefined) {
+      sets.push('break_end = ?');
+      params.push(input.descansoHasta ? input.descansoHasta + ':00' : null);
+    }
+
     if (sets.length > 0) {
       sets.push('updated_at = NOW()');
       params.push(staffId);
@@ -324,7 +355,9 @@ async function getStaffById(
   const db = getControlPool();
   const [rows] = await db.query<StaffRow[]>(
     `
-      SELECT s.id, s.first_name, s.last_name, s.email, s.phone, s.is_active, s.has_custom_schedule, r.name AS role_name
+      SELECT s.id, s.first_name, s.last_name, s.email, s.phone, s.is_active, s.has_custom_schedule,
+             s.has_custom_break, s.break_start, s.break_end,
+             r.name AS role_name
       FROM ${q(tenantDbName)}.staff s
       JOIN ${q(tenantDbName)}.roles r ON r.id = s.role_id
       WHERE s.id = ? LIMIT 1
@@ -512,6 +545,9 @@ function toStaffRecord(
     especialidades,
     horarioPropio: row.has_custom_schedule === 1,
     horario,
+    descansoPropio: row.has_custom_break === 1,
+    descansoDesde: row.break_start ? formatTimeToHHMM(row.break_start) : null,
+    descansoHasta: row.break_end ? formatTimeToHHMM(row.break_end) : null,
     activo: row.is_active === 1,
     initials: computeInitials(row.first_name, row.last_name),
     color: STAFF_COLORS[Math.abs(colorIndex) % STAFF_COLORS.length],
