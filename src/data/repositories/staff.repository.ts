@@ -337,6 +337,8 @@ export async function deleteStaff(userId: string, staffId: string): Promise<bool
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return false;
 
+  const db = getControlPool();
+  
   // Renombramos el staff al "borrarlo" para liberar el nombre original
   // y lo marcamos con deleted_at
   const [result] = await db.query<ResultSetHeader>(
