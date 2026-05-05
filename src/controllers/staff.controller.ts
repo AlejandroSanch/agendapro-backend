@@ -90,6 +90,12 @@ export const StaffController = {
 
     const params = staffIdParamSchema.parse(req.params);
 
+    // Verificar que no sea el último empleado
+    const staff = await listStaff(req.user.id);
+    if (staff.length <= 1) {
+      throw new ApiError(400, 'Debe haber al menos un empleado en el equipo.');
+    }
+
     try {
       const deleted = await deleteStaff(req.user.id, params.id);
       if (!deleted) throw new ApiError(404, 'Empleado no encontrado.');
