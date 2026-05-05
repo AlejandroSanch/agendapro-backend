@@ -16,7 +16,7 @@ export const createServiceSchema = z.object({
 
 export const updateServiceSchema = z.object({
   nombre: z.string().trim().min(1, 'nombre es requerido.').optional(),
-  categoria: z.string().trim().optional().transform(v => v || 'general'),
+  categoria: z.string().trim().optional().transform(v => v === undefined ? undefined : (v || 'general')),
   duracionMin: z.number().int().positive('duracionMin debe ser mayor a 0.').optional(),
   precio: z.number().min(0, 'precio debe ser un numero >= 0.').optional(),
   descripcion: z.string().trim().optional(),
