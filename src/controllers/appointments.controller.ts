@@ -54,7 +54,10 @@ function toApiAppointment(appointment: any) {
     precio: appointment.priceCents / 100,
     notas: appointment.notes,
     estado: statusFromDb[appointment.status as AppointmentStatusDb],
-    trabajador: appointment.trabajador,
+    trabajador: (() => {
+      const original = appointment.trabajador || '';
+      return original.replace(/^\[BORRADO\]\s+/i, '').replace(/\s*\(\d+\)/, '').trim();
+    })(),
   };
 }
 
