@@ -121,6 +121,7 @@ export async function listStaff(userId: string): Promise<StaffRecord[]> {
              r.name AS role_name
       FROM ${q(tenantDbName)}.staff s
       JOIN ${q(tenantDbName)}.roles r ON r.id = s.role_id
+      WHERE s.deleted_at IS NULL
       ORDER BY s.first_name ASC, s.last_name ASC
     `
   );
@@ -230,7 +231,7 @@ export async function updateStaff(
 
     // Verificar existencia
     const [existing] = await connection.query<StaffRow[]>(
-      `SELECT id FROM ${q(tenantDbName)}.staff WHERE id = ? LIMIT 1`,
+      `SELECT id FROM ${q(tenantDbName)}.staff WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
       [staffId]
     );
     if (!existing[0]) {
@@ -324,7 +325,7 @@ export async function toggleStaffActive(
 
   const db = getControlPool();
   const [result] = await db.query<ResultSetHeader>(
-    `UPDATE ${q(tenantDbName)}.staff SET is_active = NOT is_active, updated_at = NOW() WHERE id = ?`,
+    `UPDATE ${q(tenantDbName)}.staff SET is_active = NOT is_active, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL`,
     [staffId]
   );
 
@@ -336,9 +337,17 @@ export async function deleteStaff(userId: string, staffId: string): Promise<bool
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return false;
 
-  const db = getControlPool();
+  // Renombramos el staff al "borrarlo" para liberar el nombre original
+  // y lo marcamos con deleted_at
   const [result] = await db.query<ResultSetHeader>(
-    `DELETE FROM ${q(tenantDbName)}.staff WHERE id = ?`,
+    `
+      UPDATE ${q(tenantDbName)}.staff 
+      SET 
+        deleted_at = NOW(),
+        is_active = 0,
+        first_name = CONCAT('[BORRADO] ', first_name, ' (', DATE_FORMAT(NOW(), '%H%i%s'), ')')
+      WHERE id = ? AND deleted_at IS NULL
+    `,
     [staffId]
   );
 
@@ -374,7 +383,7 @@ async function getStaffById(
   // Determine color index if not given
   if (colorIndex === undefined) {
     const [allRows] = await db.query<RowDataPacket[]>(
-      `SELECT id FROM ${q(tenantDbName)}.staff ORDER BY created_at ASC`
+      `SELECT id FROM ${q(tenantDbName)}.staff WHERE deleted_at IS NULL ORDER BY created_at ASC`
     );
     colorIndex = allRows.findIndex((r) => r.id === staffId);
     if (colorIndex < 0) colorIndex = 0;
@@ -500,7 +509,7 @@ async function syncStaffSchedule(
 async function countStaff(tenantDbName: string): Promise<number> {
   const db = getControlPool();
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT COUNT(*) AS total FROM ${q(tenantDbName)}.staff`
+    `SELECT COUNT(*) AS total FROM ${q(tenantDbName)}.staff WHERE deleted_at IS NULL`
   );
   return Number(rows[0]?.total ?? 0);
 }
