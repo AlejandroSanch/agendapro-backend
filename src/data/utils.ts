@@ -37,7 +37,8 @@ export function normalizeEmail(email: string): string {
 
 export function normalizeServiceCategory(value: unknown): string {
   const raw = String(value || '').trim();
-  return raw || 'general';
+  if (!raw || raw.toLowerCase() === 'general') return 'General';
+  return raw;
 }
 
 export function tenantDbNameFromUserId(userId: string): string {

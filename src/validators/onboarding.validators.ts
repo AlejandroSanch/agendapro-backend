@@ -32,7 +32,7 @@ export const onboardingServicesSchema = z.object({
   services: z.array(
     z.object({
       name: z.string().trim().min(1, 'El nombre del servicio es requerido.'),
-      category: z.string().trim().optional().default('general'),
+      category: z.string().trim().optional().default('General'),
       durationMin: z.number().int().positive('La duración debe ser mayor a 0.').optional().default(30),
       priceCents: z.number().min(0, 'El precio no puede ser negativo.').optional().default(0)
     })
