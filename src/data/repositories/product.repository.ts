@@ -1,5 +1,3 @@
-// Forced reload for inventory fix
-import { randomUUID } from 'crypto';
 import { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { getControlPool } from '../db';
 import { q } from '../utils';
@@ -72,17 +70,14 @@ export async function createProduct(
   if (!tenantDbName) return null;
 
   const db = getControlPool();
-  const productId = `prod_${randomUUID()}`;
-
-  await db.query(
+  const [result] = await db.query<ResultSetHeader>(
     `
       INSERT INTO ${q(tenantDbName)}.products (
-        id, supplier_id, category_id, sku, name, unit, price_cents, cost_cents, stock_quantity, reorder_alert_level, is_active
+        supplier_id, category_id, sku, name, unit, price_cents, cost_cents, stock_quantity, reorder_alert_level, is_active
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
-      productId,
       input.supplierId ?? null,
       input.categoryId ?? null,
       input.sku ?? null,
@@ -96,7 +91,7 @@ export async function createProduct(
     ]
   );
 
-  return getProductById(tenantDbName, productId);
+  return getProductById(tenantDbName, result.insertId.toString());
 }
 
 export async function updateProduct(
@@ -151,9 +146,9 @@ export async function getProductById(
 
 function toProductRecord(row: TenantProductRow): ProductRecord {
   return {
-    id: row.id,
-    supplierId: row.supplier_id,
-    categoryId: row.category_id,
+    id: String(row.id),
+    supplierId: row.supplier_id ? String(row.supplier_id) : null,
+    categoryId: row.category_id ? String(row.category_id) : null,
     sku: row.sku,
     name: row.name,
     unit: row.unit,
@@ -176,7 +171,6 @@ export async function createProductsBulk(
   const db = getControlPool();
   
   const values = inputs.map(input => [
-    `prod_${randomUUID()}`,
     input.supplierId ?? null,
     input.categoryId ?? null,
     input.sku ?? null,
@@ -192,7 +186,7 @@ export async function createProductsBulk(
   const [result] = await db.query<ResultSetHeader>(
     `
       INSERT INTO ${q(tenantDbName)}.products (
-        id, supplier_id, category_id, sku, name, unit, price_cents, cost_cents, stock_quantity, reorder_alert_level, is_active
+        supplier_id, category_id, sku, name, unit, price_cents, cost_cents, stock_quantity, reorder_alert_level, is_active
       )
       VALUES ?
     `,

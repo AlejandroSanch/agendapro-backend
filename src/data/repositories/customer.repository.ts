@@ -1,10 +1,6 @@
-import { randomUUID } from 'crypto';
 import { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { getControlPool } from '../db';
 import {
-  isDuplicateKeyError,
-  isPrimaryKeyDuplicateError,
-  nextSequentialId,
   q,
 } from '../utils';
 import { getTenantDbNameByUserId } from './user.repository';
@@ -94,7 +90,7 @@ function toCustomerRecord(row: CustomerRow, citas: CustomerCitaRecord[]): Custom
     : '') as CustomerSex;
 
   return {
-    id: row.id,
+    id: String(row.id),
     nombre,
     telefono: row.phone ?? '',
     email: row.email ?? '',
@@ -113,7 +109,7 @@ function toCustomerCitaRecord(row: AppointmentRow): CustomerCitaRecord {
   const hora = startAt.slice(11, 16);
   const estado = STATUS_MAP[row.status] ?? 'pendiente';
   return {
-    id: row.id,
+    id: String(row.id),
     fecha,
     hora,
     servicio: row.service_name ?? '',
@@ -243,24 +239,16 @@ export async function createCustomer(
 
   const connection = await db.getConnection();
   try {
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const customerId = await nextSequentialId(connection, `${q(tenantDbName)}.customers`, 'cliente');
-      try {
-        await connection.query(
-          `
-            INSERT INTO ${q(tenantDbName)}.customers
-              (id, first_name, last_name, phone, email, birth_date, sex, notes, is_active, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
-          `,
-          [customerId, firstName, lastName, phone, email, birthDate, sex, notes]
-        );
-        return getCustomerById(userId, customerId);
-      } catch (error) {
-        if (isDuplicateKeyError(error) && isPrimaryKeyDuplicateError(error)) continue;
-        throw error;
-      }
-    }
-    throw new Error('No se pudo generar un ID de cliente único.');
+    const [result] = await connection.query<ResultSetHeader>(
+      `
+        INSERT INTO ${q(tenantDbName)}.customers
+          (first_name, last_name, phone, email, birth_date, sex, notes, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+      `,
+      [firstName, lastName, phone, email, birthDate, sex, notes]
+    );
+    const newId = result.insertId.toString();
+    return getCustomerById(userId, newId);
   } finally {
     connection.release();
   }

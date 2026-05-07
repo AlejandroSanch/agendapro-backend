@@ -36,6 +36,7 @@ interface UserRow extends RowDataPacket {
   plan: string;
   business_name: string;
   avatar_initials: string | null;
+  trial_end_date: string | null;
   tenant_db_name: string;
 }
 
@@ -53,7 +54,7 @@ export async function findUserByEmail(email: string): Promise<UserRecord | undef
   const db = getControlPool();
   const [rows] = await db.query<UserRow[]>(
     `
-      SELECT id, name, email, password, email_verified, email_verification_token, terms_accepted_at, plan, business_name, avatar_initials, tenant_db_name
+      SELECT id, name, email, password, email_verified, email_verification_token, terms_accepted_at, plan, business_name, avatar_initials, trial_end_date, tenant_db_name
       FROM users WHERE email = ? LIMIT 1
     `,
     [normalizeEmail(email)]
@@ -69,7 +70,7 @@ export async function findUserById(id: string): Promise<UserRecord | undefined> 
   const db = getControlPool();
   const [rows] = await db.query<UserRow[]>(
     `
-      SELECT id, name, email, password, email_verified, email_verification_token, terms_accepted_at, plan, business_name, avatar_initials, tenant_db_name
+      SELECT id, name, email, password, email_verified, email_verification_token, terms_accepted_at, plan, business_name, avatar_initials, trial_end_date, tenant_db_name
       FROM users WHERE id = ? LIMIT 1
     `,
     [id]
@@ -193,6 +194,7 @@ export function sanitizeUser(user: UserRecord): UserPublic {
     plan: user.plan,
     businessName: user.businessName,
     avatarInitials: user.avatarInitials,
+    trialEndDate: user.trialEndDate,
   };
 }
 
@@ -266,9 +268,14 @@ export async function clearModuleOverride(
 
 export async function setUserPlan(userId: string, plan: PlanId): Promise<UserPublic | null> {
   const db = getControlPool();
+  const normalizedPlan = normalizePlan(plan);
+  const trialEndDate = normalizedPlan === 'starter' 
+    ? null 
+    : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+
   const [result] = await db.query<ResultSetHeader>(
-    `UPDATE users SET plan = ?, updated_at = NOW() WHERE id = ?`,
-    [normalizePlan(plan), userId]
+    `UPDATE users SET plan = ?, trial_end_date = ?, updated_at = NOW() WHERE id = ?`,
+    [normalizedPlan, trialEndDate, userId]
   );
 
   if (!result.affectedRows) return null;
@@ -292,6 +299,7 @@ function rowToUserRecord(
     plan: normalizePlan(row.plan),
     businessName: row.business_name,
     avatarInitials: row.avatar_initials ?? undefined,
+    trialEndDate: row.trial_end_date ?? undefined,
     moduleOverrides,
   };
 }

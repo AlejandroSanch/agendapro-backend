@@ -1,7 +1,7 @@
-import { randomUUID } from 'crypto';
+
 import { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { getControlPool } from '../db';
-import { isDuplicateKeyError, isPrimaryKeyDuplicateError, q } from '../utils';
+import { q } from '../utils';
 import { getTenantDbNameByUserId } from './user.repository';
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -81,10 +81,10 @@ interface StaffScheduleRow extends RowDataPacket {
 
 const STAFF_COLORS = ['#4f46e5', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777'];
 
-const ROLE_NAME_TO_ID: Record<StaffRoleName, string> = {
-  admin: 'role_admin',
-  staff: 'role_staff',
-  viewer: 'role_viewer',
+const ROLE_NAME_TO_ID: Record<StaffRoleName, number> = {
+  admin: 1,
+  staff: 2,
+  viewer: 3,
 };
 
 const WEEKDAY_MAP: { code: WeekDayCode; label: string; dow: number }[] = [
@@ -152,61 +152,49 @@ export async function createStaff(
 
     const { firstName, lastName } = splitName(input.nombre);
     const rol: StaffRoleName = input.rol ?? 'staff';
-    const roleId = ROLE_NAME_TO_ID[rol] ?? 'role_staff';
+    const roleId = ROLE_NAME_TO_ID[rol] ?? 2;
     const isActive = input.activo !== undefined ? input.activo : true;
     const hasCustomSchedule = input.horarioPropio ?? false;
     const hasCustomBreak = input.descansoPropio ?? false;
 
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const staffId = `stf_${randomUUID()}`;
+    const [result] = await connection.query<ResultSetHeader>(
+      `
+        INSERT INTO ${q(tenantDbName)}.staff (
+          role_id, first_name, last_name, email, phone, is_active, has_custom_schedule,
+          has_custom_break, break_start, break_end, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      `,
+      [
+        roleId,
+        firstName,
+        lastName,
+        input.email?.trim() || null,
+        input.telefono?.trim() || null,
+        isActive ? 1 : 0,
+        hasCustomSchedule ? 1 : 0,
+        hasCustomBreak ? 1 : 0,
+        input.descansoDesde ? input.descansoDesde + ':00' : null,
+        input.descansoHasta ? input.descansoHasta + ':00' : null,
+      ]
+    );
 
-      try {
-        await connection.query(
-          `
-            INSERT INTO ${q(tenantDbName)}.staff (
-              id, role_id, first_name, last_name, email, phone, is_active, has_custom_schedule,
-              has_custom_break, break_start, break_end, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-          `,
-          [
-            staffId,
-            roleId,
-            firstName,
-            lastName,
-            input.email?.trim() || null,
-            input.telefono?.trim() || null,
-            isActive ? 1 : 0,
-            hasCustomSchedule ? 1 : 0,
-            hasCustomBreak ? 1 : 0,
-            input.descansoDesde ? input.descansoDesde + ':00' : null,
-            input.descansoHasta ? input.descansoHasta + ':00' : null,
-          ]
-        );
+    const staffId = result.insertId.toString();
 
-        // Guardar especialidades (staff_services)
-        if (input.especialidades?.length) {
-          await syncStaffServices(connection, tenantDbName, staffId, input.especialidades);
-        }
-
-        // Guardar horario
-        if (hasCustomSchedule && input.horario?.length) {
-          await syncStaffSchedule(connection, tenantDbName, staffId, input.horario);
-        }
-
-        await connection.commit();
-
-        const totalStaff = await countStaff(tenantDbName);
-        return await getStaffById(tenantDbName, staffId, totalStaff - 1);
-      } catch (error) {
-        if (isDuplicateKeyError(error) && isPrimaryKeyDuplicateError(error)) {
-          continue;
-        }
-        throw error;
-      }
+    // Guardar especialidades (staff_services)
+    if (input.especialidades?.length) {
+      await syncStaffServices(connection, tenantDbName, staffId, input.especialidades);
     }
 
-    throw new Error('No se pudo generar un id de empleado unico tras varios intentos.');
+    // Guardar horario
+    if (hasCustomSchedule && input.horario?.length) {
+      await syncStaffSchedule(connection, tenantDbName, staffId, input.horario);
+    }
+
+    await connection.commit();
+
+    const totalStaff = await countStaff(tenantDbName);
+    return await getStaffById(tenantDbName, staffId, totalStaff - 1);
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -259,7 +247,7 @@ export async function updateStaff(
     }
 
     if (input.rol !== undefined) {
-      const roleId = ROLE_NAME_TO_ID[input.rol] ?? 'role_staff';
+      const roleId = ROLE_NAME_TO_ID[input.rol] ?? 2;
       sets.push('role_id = ?');
       params.push(roleId);
     }
@@ -346,8 +334,7 @@ export async function deleteStaff(userId: string, staffId: string): Promise<bool
       UPDATE ${q(tenantDbName)}.staff 
       SET 
         deleted_at = NOW(),
-        is_active = 0,
-        first_name = CONCAT('[BORRADO] ', first_name, ' (', DATE_FORMAT(NOW(), '%H%i%s'), ')')
+        is_active = 0
       WHERE id = ? AND deleted_at IS NULL
     `,
     [staffId]
@@ -387,7 +374,7 @@ async function getStaffById(
     const [allRows] = await db.query<RowDataPacket[]>(
       `SELECT id FROM ${q(tenantDbName)}.staff WHERE deleted_at IS NULL ORDER BY created_at ASC`
     );
-    colorIndex = allRows.findIndex((r) => r.id === staffId);
+    colorIndex = allRows.findIndex((r) => String(r.id) === String(staffId));
     if (colorIndex < 0) colorIndex = 0;
   }
 
@@ -500,10 +487,9 @@ async function syncStaffSchedule(
     const wd = WEEKDAY_MAP.find((w) => w.code === h.dia);
     if (!wd) continue;
 
-    const schedId = `stfsch_${randomUUID()}`;
     await connection.query(
-      `INSERT INTO ${q(tenantDbName)}.staff_schedules (id, staff_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`,
-      [schedId, staffId, wd.dow, h.desde + ':00', h.hasta + ':00']
+      `INSERT INTO ${q(tenantDbName)}.staff_schedules (staff_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?)`,
+      [staffId, wd.dow, h.desde + ':00', h.hasta + ':00']
     );
   }
 }
@@ -548,7 +534,7 @@ function toStaffRecord(
 ): StaffRecord {
   const fullName = [row.first_name, row.last_name].filter(Boolean).join(' ');
   return {
-    id: row.id,
+    id: String(row.id),
     nombre: fullName,
     telefono: row.phone ?? '',
     email: row.email ?? '',

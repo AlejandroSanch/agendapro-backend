@@ -1,12 +1,6 @@
-import { randomUUID } from 'crypto';
 import { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { getControlPool } from '../db';
-import {
-  isDuplicateKeyError,
-  isPrimaryKeyDuplicateError,
-  normalizeServiceCategory,
-  q,
-} from '../utils';
+import { normalizeServiceCategory, q } from '../utils';
 import { getTenantDbNameByUserId } from './user.repository';
 
 export interface ServiceRecord {
@@ -85,54 +79,57 @@ export async function createService(
         ? await getNextServiceDisplayOrder(connection, tenantDbName)
         : normalized.displayOrder;
 
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const serviceId = `svc_${randomUUID()}`;
-
-      let finalCatId = '';
-      const [catRows] = await connection.query<RowDataPacket[]>(
-        `SELECT id FROM ${q(tenantDbName)}.categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1`,
-        [normalized.category]
+    let finalCatId: string | null = null;
+    const targetCategory = (normalized.category || 'General').trim();
+    const [catRows] = await connection.query<RowDataPacket[]>(
+      `SELECT id FROM ${q(tenantDbName)}.categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND type = 'service' LIMIT 1`,
+      [targetCategory]
+    );
+    
+    if (!catRows[0]) {
+      const [catResult] = await connection.query<ResultSetHeader>(
+        `INSERT IGNORE INTO ${q(tenantDbName)}.categories (name, description, type) VALUES (?, '', 'service')`, 
+        [targetCategory]
       );
+      finalCatId = catResult.insertId ? catResult.insertId.toString() : null;
       
-      if (!catRows[0]) {
-        // Generar un ID único para la categoría nueva
-        finalCatId = `cat_${randomUUID()}`;
-        await connection.query(`INSERT IGNORE INTO ${q(tenantDbName)}.categories (id, name, description) VALUES (?, ?, '')`, [finalCatId, normalized.category]);
-      } else {
-        finalCatId = catRows[0].id;
+      // Si insertId es 0 (por IGNORE), lo buscamos de nuevo
+      if (!finalCatId || finalCatId === '0') {
+         const [retryRows] = await connection.query<RowDataPacket[]>(
+           `SELECT id FROM ${q(tenantDbName)}.categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND type = 'service' LIMIT 1`,
+           [targetCategory]
+         );
+         finalCatId = retryRows[0]?.id ? String(retryRows[0].id) : null;
       }
-
-      try {
-        await connection.query(
-          `
-            INSERT INTO ${q(tenantDbName)}.services (
-              id, name, category_id, description, duration_minutes, price_cents, display_order, is_active, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-          `,
-          [
-            serviceId,
-            normalized.name,
-            finalCatId,
-            normalized.description,
-            normalized.durationMin,
-            normalized.priceCents,
-            displayOrder,
-            normalized.isActive ? 1 : 0,
-          ]
-        );
-
-        await connection.commit();
-        return getServiceById(tenantDbName, serviceId);
-      } catch (error) {
-        if (isDuplicateKeyError(error) && isPrimaryKeyDuplicateError(error)) {
-          continue;
-        }
-        throw error;
-      }
+    } else {
+      finalCatId = String(catRows[0].id);
     }
 
-    throw new Error('No se pudo generar un id de servicio unico tras varios intentos.');
+    try {
+      const [result] = await connection.query<ResultSetHeader>(
+        `
+          INSERT INTO ${q(tenantDbName)}.services (
+            name, category_id, description, duration_minutes, price_cents, display_order, is_active, created_at, updated_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        `,
+        [
+          normalized.name,
+          finalCatId,
+          normalized.description,
+          normalized.durationMin,
+          normalized.priceCents,
+          displayOrder,
+          normalized.isActive ? 1 : 0,
+        ]
+      );
+
+      const serviceId = result.insertId.toString();
+      await connection.commit();
+      return await getServiceById(tenantDbName, serviceId);
+    } catch (error) {
+      throw error;
+    }
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -158,20 +155,28 @@ export async function updateService(
   // Solo re-resolver categoría si se está cambiando explícitamente
   let finalCatId = current.categoryId;
   if (input.category !== undefined) {
-    const targetCategory = (normalized.category || 'general').trim();
+    const targetCategory = (normalized.category || 'General').trim();
     const [catRows] = await db.query<RowDataPacket[]>(
-      `SELECT id FROM ${q(tenantDbName)}.categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1`,
+      `SELECT id FROM ${q(tenantDbName)}.categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND type = 'service' LIMIT 1`,
       [targetCategory]
     );
 
     if (!catRows[0]) {
-      finalCatId = `cat_${randomUUID()}`;
-      await db.query(`INSERT IGNORE INTO ${q(tenantDbName)}.categories (id, name, description) VALUES (?, ?, '')`, [
-        finalCatId,
-        targetCategory.toLowerCase() === 'general' ? 'general' : targetCategory,
+      const [catResult] = await db.query<ResultSetHeader>(
+        `INSERT IGNORE INTO ${q(tenantDbName)}.categories (name, description, type) VALUES (?, '', 'service')`, [
+        targetCategory,
       ]);
+      finalCatId = catResult.insertId ? catResult.insertId.toString() : current.categoryId;
+      
+      if (!finalCatId || finalCatId === '0') {
+        const [retryRows] = await db.query<RowDataPacket[]>(
+          `SELECT id FROM ${q(tenantDbName)}.categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND type = 'service' LIMIT 1`,
+          [targetCategory]
+        );
+        finalCatId = retryRows[0]?.id ? String(retryRows[0].id) : current.categoryId;
+      }
     } else {
-      finalCatId = catRows[0].id;
+      finalCatId = String(catRows[0].id);
     }
   }
 
@@ -210,8 +215,7 @@ export async function deleteService(userId: string, serviceId: string): Promise<
       UPDATE ${q(tenantDbName)}.services 
       SET 
         deleted_at = NOW(),
-        is_active = 0,
-        name = CONCAT('[BORRADO] ', name, ' (', DATE_FORMAT(NOW(), '%H%i%s'), ')')
+        is_active = 0
       WHERE id = ? AND deleted_at IS NULL
     `,
     [serviceId]
@@ -298,12 +302,12 @@ function normalizeUpdateServiceInput(input: UpdateServiceInput, current: Service
   });
 }
 
-function toServiceRecord(row: TenantServiceRow): ServiceRecord {
+export function toServiceRecord(row: TenantServiceRow): ServiceRecord {
   return {
-    id: row.id,
+    id: String(row.id),
     name: row.name,
     category: String(row.category || 'general').trim() || 'general',
-    categoryId: row.category_id || '',
+    categoryId: row.category_id ? String(row.category_id) : '',
     durationMin: Number(row.duration_minutes || 0),
     priceCents: Number(row.price_cents || 0),
     description: row.description ?? '',

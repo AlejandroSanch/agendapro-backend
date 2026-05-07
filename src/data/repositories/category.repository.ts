@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { getControlPool } from '../db';
 import { q } from '../utils';
@@ -34,7 +33,10 @@ export async function listCategories(userId: string, type?: 'service' | 'product
 
   const [rows] = await db.query<RowDataPacket[]>(query, params);
 
-  return rows as CategoryRecord[];
+  return rows.map(row => ({
+    ...row,
+    id: String(row.id)
+  })) as CategoryRecord[];
 }
 
 export async function createCategory(
@@ -45,12 +47,12 @@ export async function createCategory(
   if (!tenantDbName) return null;
 
   const db = getControlPool();
-  const categoryId = `cat_${randomUUID()}`;
-
-  await db.query(
-    `INSERT INTO ${q(tenantDbName)}.categories (id, name, description, type) VALUES (?, ?, ?, ?)`,
-    [categoryId, input.name, input.description || null, input.type]
+  const [result] = await db.query<ResultSetHeader>(
+    `INSERT INTO ${q(tenantDbName)}.categories (name, description, type) VALUES (?, ?, ?)`,
+    [input.name, input.description || null, input.type]
   );
+
+  const categoryId = result.insertId.toString();
 
   return getCategoryById(tenantDbName, categoryId);
 }
@@ -135,5 +137,9 @@ export async function getCategoryById(
 
   const row = rows[0];
   if (!row) return null;
-  return row as CategoryRecord;
+  
+  return {
+    ...row,
+    id: String(row.id)
+  } as CategoryRecord;
 }

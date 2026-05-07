@@ -1,6 +1,5 @@
 import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { getControlPool } from '../db';
-import { randomUUID } from 'crypto';
 
 export interface SystemNotification {
   id: string;
@@ -23,7 +22,7 @@ export async function listSystemNotifications(tenantDb: string, limit = 50): Pro
   );
 
   return rows.map(r => ({
-    id: r.id,
+    id: String(r.id),
     type: r.type,
     title: r.title,
     message: r.message,
@@ -43,11 +42,10 @@ export async function createSystemNotification(tenantDb: string, data: {
   metadata?: any;
 }): Promise<void> {
   const db = getControlPool();
-  const id = randomUUID();
   
   await db.query(
-    `INSERT INTO \`${tenantDb}\`.system_notifications (id, type, title, message, metadata) VALUES (?, ?, ?, ?, ?)`,
-    [id, data.type, data.title, data.message, JSON.stringify(data.metadata || {})]
+    `INSERT INTO \`${tenantDb}\`.system_notifications (type, title, message, metadata) VALUES (?, ?, ?, ?)`,
+    [data.type, data.title, data.message, JSON.stringify(data.metadata || {})]
   );
 }
 

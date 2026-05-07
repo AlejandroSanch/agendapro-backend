@@ -1,5 +1,4 @@
-import { randomUUID } from 'crypto';
-import { RowDataPacket } from 'mysql2/promise';
+import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { getControlPool } from '../db';
 import { q } from '../utils';
 import { getTenantDbNameByUserId } from './user.repository';
@@ -229,27 +228,25 @@ export async function createStaffMember(
   if (!tenantDbName) return null;
 
   const db = getControlPool();
-  const staffId = `stf_${randomUUID()}`;
-
-  let roleId = 'rl_staff';
+  let roleId = '2'; // Default to staff role ID
   const [roleRows] = await db.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.roles WHERE name = ? LIMIT 1`, [input.role || 'staff']);
   if (!roleRows[0]) {
-    await db.query(`INSERT INTO ${q(tenantDbName)}.roles (id, name) VALUES (?, ?)`, [roleId, input.role || 'staff']);
+    const [roleResult] = await db.query<ResultSetHeader>(`INSERT INTO ${q(tenantDbName)}.roles (name) VALUES (?)`, [input.role || 'staff']);
+    roleId = roleResult.insertId.toString();
   } else {
-    roleId = roleRows[0].id;
+    roleId = String(roleRows[0].id);
   }
 
   const nameParts = String(input.fullName || '').trim().split(' ');
   const firstName = nameParts[0] || '';
   const lastName = nameParts.slice(1).join(' ') || '';
 
-  await db.query(
+  const [staffResult] = await db.query<ResultSetHeader>(
     `
-      INSERT INTO ${q(tenantDbName)}.staff (id, role_id, first_name, last_name, email, phone, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+      INSERT INTO ${q(tenantDbName)}.staff (role_id, first_name, last_name, email, phone, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 1, NOW(), NOW())
     `,
     [
-      staffId,
       roleId,
       firstName,
       lastName,
@@ -257,6 +254,8 @@ export async function createStaffMember(
       input.phone || null,
     ]
   );
+  
+  const staffId = staffResult.insertId.toString();
 
   const [rows] = await db.query<RowDataPacket[]>(
     `
@@ -280,7 +279,7 @@ function rowToStaffRecord(row: RowDataPacket): StaffRecord {
   }
 
   return {
-    id: row.id,
+    id: String(row.id),
     fullName: row.full_name,
     email: row.email ?? '',
     phone: row.phone ?? '',

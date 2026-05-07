@@ -23,6 +23,7 @@ export interface UserPublic {
   plan: PlanId;
   businessName: string;
   avatarInitials?: string;
+  trialEndDate?: string;
 }
 
 export interface UserRecord extends UserPublic {

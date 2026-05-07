@@ -5,9 +5,6 @@ import {
   addMinutesToMySqlDateTime,
   AppointmentStatusDb,
   composeMySqlDateTime,
-  isDuplicateKeyError,
-  isPrimaryKeyDuplicateError,
-  nextSequentialId,
   normalizeAppointmentStatus,
   q,
   splitMySqlDateTime,
@@ -88,7 +85,7 @@ export async function listAppointments(
       SELECT
         a.id, a.status, DATE_FORMAT(a.start_at, '%Y-%m-%d %H:%i:%s') AS start_at, a.notes,
         CONCAT(c.first_name, ' ', c.last_name) AS customer_name, c.phone AS customer_phone,
-        s.name AS service_name, s.duration_minutes AS service_duration_minutes, s.price_cents AS service_price_cents,
+        COALESCE(s.name, a.service_name) AS service_name, s.duration_minutes AS service_duration_minutes, s.price_cents AS service_price_cents,
         CONCAT(st.first_name, ' ', st.last_name) AS staff_name
       FROM ${q(tenantDbName)}.appointments a
       INNER JOIN ${q(tenantDbName)}.customers c ON c.id = a.customer_id
@@ -139,9 +136,7 @@ export async function createAppointment(
 
     const serviceId = await ensureService(connection, tenantDbName, normalized.serviceName, normalized.durationMin, normalized.priceCents);
 
-    const appointmentId = `apt_${randomUUID()}`;
-
-    let staffId = 'stf_placeholder';
+    let staffId: string | null = null;
     if (normalized.trabajador) {
       const normalizedStaffName = normalized.trabajador.trim().toLowerCase().replace(/\s+/g, ' ');
       const [staffRows] = await connection.query<IdRow[]>(
@@ -149,36 +144,42 @@ export async function createAppointment(
         [normalizedStaffName]
       );
       if (staffRows[0]?.id) {
-        staffId = staffRows[0].id;
+        staffId = String(staffRows[0].id);
       }
     }
     
     // Si no se encontró o no se envió trabajador, usamos el primer staff
-    if (staffId === 'stf_placeholder') {
-      const [staffRows] = await connection.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.staff LIMIT 1`);
-      staffId = staffRows[0]?.id || 'stf_placeholder';
-      if (!staffRows[0]) {
-        await connection.query(`INSERT IGNORE INTO ${q(tenantDbName)}.roles (id, name) VALUES ('rl_admin', 'Admin')`);
-        await connection.query(`INSERT IGNORE INTO ${q(tenantDbName)}.staff (id, role_id, first_name, last_name, is_active, created_at, updated_at) VALUES (?, 'rl_admin', 'Sin', 'Asignar', 1, NOW(), NOW())`, [staffId]);
+    if (!staffId) {
+      const [staffRows] = await connection.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.staff WHERE deleted_at IS NULL LIMIT 1`);
+      if (staffRows[0]?.id) {
+        staffId = String(staffRows[0].id);
+      } else {
+        // Crear un empleado por defecto (role_id 1 = admin)
+        const [insertResult] = await connection.query<ResultSetHeader>(
+          `INSERT INTO ${q(tenantDbName)}.staff (role_id, first_name, last_name, is_active, created_at, updated_at) VALUES (1, 'Sin', 'Asignar', 1, NOW(), NOW())`
+        );
+        staffId = insertResult.insertId.toString();
       }
     }
 
-    await connection.query(
+    const [result] = await connection.query<ResultSetHeader>(
       `
         INSERT INTO ${q(tenantDbName)}.appointments (
-          id, customer_id, title, status, start_at, end_at, notes, created_at, updated_at
+          customer_id, service_name, status, start_at, end_at, notes, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
       `,
       [
-        appointmentId, customerId, `${normalized.serviceName} - ${normalized.customerName}`,
+        customerId, normalized.serviceName,
         normalized.status, startAt, endAt, normalized.notes || null,
       ]
     );
+    
+    const appointmentId = result.insertId.toString();
 
     await connection.query(
-      `INSERT INTO ${q(tenantDbName)}.appointment_services (id, appointment_id, service_id, staff_id) VALUES (?, ?, ?, ?)`,
-      [`asv_${randomUUID()}`, appointmentId, serviceId, staffId]
+      `INSERT INTO ${q(tenantDbName)}.appointment_services (appointment_id, service_id, staff_id) VALUES (?, ?, ?)`,
+      [appointmentId, serviceId, staffId]
     );
 
     await connection.commit();
@@ -243,17 +244,17 @@ export async function updateAppointment(
     const [result] = await connection.query<ResultSetHeader>(
       `
         UPDATE ${q(tenantDbName)}.appointments
-        SET customer_id = ?, title = ?, status = ?, start_at = ?, end_at = ?, notes = ?, updated_at = NOW()
+        SET customer_id = ?, service_name = ?, status = ?, start_at = ?, end_at = ?, notes = ?, updated_at = NOW()
         WHERE id = ?
       `,
       [
-        customerId, `${merged.serviceName} - ${merged.customerName}`, merged.status,
+        customerId, merged.serviceName, merged.status,
         startAt, endAt, merged.notes || null, appointmentId,
       ]
     );
 
     // Update pivot
-    let staffId = 'stf_placeholder';
+    let staffId: string | null = null;
     if (merged.trabajador) {
       const normalizedStaffName = merged.trabajador.trim().toLowerCase().replace(/\s+/g, ' ');
       const [staffRows] = await connection.query<IdRow[]>(
@@ -261,25 +262,25 @@ export async function updateAppointment(
         [normalizedStaffName]
       );
       if (staffRows[0]?.id) {
-        staffId = staffRows[0].id;
+        staffId = String(staffRows[0].id);
       }
     }
     
     // Si no se encontró, mantenemos el actual o asignamos el primero
-    if (staffId === 'stf_placeholder') {
+    if (!staffId) {
       const [currentStaffRows] = await connection.query<IdRow[]>(`SELECT staff_id as id FROM ${q(tenantDbName)}.appointment_services WHERE appointment_id = ? LIMIT 1`, [appointmentId]);
       if (currentStaffRows[0]?.id) {
-         staffId = currentStaffRows[0].id;
+         staffId = String(currentStaffRows[0].id);
       } else {
-         const [staffRows] = await connection.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.staff LIMIT 1`);
-         staffId = staffRows[0]?.id || 'stf_placeholder';
+         const [staffRows] = await connection.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.staff WHERE deleted_at IS NULL LIMIT 1`);
+         staffId = staffRows[0]?.id ? String(staffRows[0].id) : '1';
       }
     }
     
     await connection.query(`DELETE FROM ${q(tenantDbName)}.appointment_services WHERE appointment_id = ?`, [appointmentId]);
     await connection.query(
-      `INSERT INTO ${q(tenantDbName)}.appointment_services (id, appointment_id, service_id, staff_id) VALUES (?, ?, ?, ?)`,
-      [`asv_${randomUUID()}`, appointmentId, serviceId, staffId]
+      `INSERT INTO ${q(tenantDbName)}.appointment_services (appointment_id, service_id, staff_id) VALUES (?, ?, ?)`,
+      [appointmentId, serviceId, staffId]
     );
 
     if (!result.affectedRows) {
@@ -307,7 +308,7 @@ async function getAppointmentById(
       SELECT
         a.id, a.status, DATE_FORMAT(a.start_at, '%Y-%m-%d %H:%i:%s') AS start_at, a.notes,
         CONCAT(c.first_name, ' ', c.last_name) AS customer_name, c.phone AS customer_phone,
-        s.name AS service_name, s.duration_minutes AS service_duration_minutes, s.price_cents AS service_price_cents,
+        COALESCE(s.name, a.service_name) AS service_name, s.duration_minutes AS service_duration_minutes, s.price_cents AS service_price_cents,
         CONCAT(st.first_name, ' ', st.last_name) AS staff_name
       FROM ${q(tenantDbName)}.appointments a
       INNER JOIN ${q(tenantDbName)}.customers c ON c.id = a.customer_id
@@ -340,24 +341,15 @@ async function ensureCustomer(
 
   if (rows[0]?.id) return rows[0].id;
 
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const customerId = await nextSequentialId(connection, `${q(tenantDbName)}.customers`, 'cliente');
-
-    try {
-      await connection.query(
-        `INSERT INTO ${q(tenantDbName)}.customers (id, first_name, last_name, phone, created_at, updated_at) VALUES (?, ?, '', ?, NOW(), NOW())`,
-        [customerId, normalizedName, normalizedPhone || null]
-      );
-      return customerId;
-    } catch (error) {
-      if (isDuplicateKeyError(error) && isPrimaryKeyDuplicateError(error)) {
-        continue;
-      }
-      throw error;
-    }
+  try {
+    const [result] = await connection.query<ResultSetHeader>(
+      `INSERT INTO ${q(tenantDbName)}.customers (first_name, last_name, phone, created_at, updated_at) VALUES (?, '', ?, NOW(), NOW())`,
+      [normalizedName, normalizedPhone || null]
+    );
+    return result.insertId.toString();
+  } catch (error) {
+    throw error;
   }
-
-  throw new Error('No se pudo generar un id de cliente unico tras varios intentos.');
 }
 
 async function ensureService(
@@ -393,32 +385,32 @@ async function ensureService(
   );
 
   if (catRows[0]?.id) {
-    categoryId = catRows[0].id;
+    categoryId = String(catRows[0].id);
   } else {
     // Si no existe la categoría General, la creamos
-    categoryId = `cat_${randomUUID()}`;
-    await connection.query(
-      `INSERT IGNORE INTO ${q(tenantDbName)}.categories (id, name, description) VALUES (?, ?, 'Categoría por defecto para servicios auto-generados')`,
-      [categoryId, defaultCategory]
+    const [catResult] = await connection.query<ResultSetHeader>(
+      `INSERT IGNORE INTO ${q(tenantDbName)}.categories (name, description) VALUES (?, 'Categoría por defecto para servicios auto-generados')`,
+      [defaultCategory]
     );
     
     // Si el INSERT IGNORE no insertó nada (porque se creó justo antes), volvemos a buscar el ID
-    const [catRowsRetry] = await connection.query<IdRow[]>(
-      `SELECT id FROM ${q(tenantDbName)}.categories WHERE LOWER(name) = LOWER(?) LIMIT 1`,
-      [defaultCategory]
-    );
-    if (catRowsRetry[0]?.id) {
-      categoryId = catRowsRetry[0].id;
+    if (!catResult.insertId) {
+      const [catRowsRetry] = await connection.query<IdRow[]>(
+        `SELECT id FROM ${q(tenantDbName)}.categories WHERE LOWER(name) = LOWER(?) LIMIT 1`,
+        [defaultCategory]
+      );
+      categoryId = String(catRowsRetry[0]?.id || '1');
+    } else {
+      categoryId = catResult.insertId.toString();
     }
   }
 
   // 3. Crear el servicio con el category_id resuelto
-  const serviceId = `svc_${randomUUID()}`;
-  await connection.query(
-    `INSERT INTO ${q(tenantDbName)}.services (id, category_id, name, duration_minutes, price_cents, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, NOW(), NOW())`,
-    [serviceId, categoryId, normalizedName, durationMin, priceCents]
+  const [serviceResult] = await connection.query<ResultSetHeader>(
+    `INSERT INTO ${q(tenantDbName)}.services (category_id, name, duration_minutes, price_cents, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, NOW(), NOW())`,
+    [categoryId, normalizedName, durationMin, priceCents]
   );
-  return serviceId;
+  return serviceResult.insertId.toString();
 }
 
 function normalizeUpsertAppointmentInput(input: UpsertAppointmentInput): UpsertAppointmentInput {
@@ -440,7 +432,7 @@ function toAppointmentRecord(row: AppointmentJoinedRow): AppointmentRecord {
   const { date, time } = splitMySqlDateTime(row.start_at);
 
   return {
-    id: row.id,
+    id: String(row.id),
     customerName: row.customer_name,
     customerPhone: row.customer_phone ?? '',
     serviceName: row.service_name,

@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { getControlPool } from '../db';
 import { q } from '../utils';
@@ -41,15 +40,15 @@ export async function listInventoryLogs(userId: string): Promise<InventoryLogRec
   );
 
   return rows.map(row => ({
-    id: row.id,
-    productId: row.product_id,
+    id: String(row.id),
+    productId: String(row.product_id),
     productName: row.product_name,
     type: row.type,
     quantity: row.quantity,
     stockBefore: row.stock_before,
     stockAfter: row.stock_after,
     notes: row.notes,
-    staffId: row.staff_id,
+    staffId: row.staff_id ? String(row.staff_id) : null,
     createdAt: row.created_at,
   }));
 }
@@ -88,18 +87,16 @@ export async function adjustStock(
   );
 
   // 3. Crear log
-  const logId = `log_${randomUUID()}`;
   const quantityForLog = input.type === 'adjustment' ? input.quantity - stockBefore : input.quantity;
 
-  await db.query(
+  const [result] = await db.query<ResultSetHeader>(
     `
       INSERT INTO ${q(tenantDbName)}.inventory_logs (
-        id, product_id, type, quantity, stock_before, stock_after, notes, staff_id
+        product_id, type, quantity, stock_before, stock_after, notes, staff_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
     [
-      logId,
       input.productId,
       input.type,
       quantityForLog,
@@ -111,7 +108,7 @@ export async function adjustStock(
   );
 
   return {
-    id: logId,
+    id: result.insertId.toString(),
     productId: input.productId,
     type: input.type,
     quantity: quantityForLog,
