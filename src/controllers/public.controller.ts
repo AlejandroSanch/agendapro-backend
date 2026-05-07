@@ -37,11 +37,11 @@ export async function confirmAppointmentPublic(req: Request, res: Response) {
     // --- NOTIFICACIÓN AL GESTOR ---
     try {
       const [aptInfo] = await db.query<RowDataPacket[]>(
-        `SELECT a.title, c.first_name, c.last_name FROM \`${foundTenant}\`.appointments a 
+        `SELECT a.service_name, c.first_name, c.last_name FROM \`${foundTenant}\`.appointments a 
          JOIN \`${foundTenant}\`.customers c ON a.customer_id = c.id WHERE a.id = ?`, [id]
       );
       const customerName = aptInfo[0] ? `${aptInfo[0].first_name} ${aptInfo[0].last_name}` : 'Cliente';
-      const aptTitle = aptInfo[0]?.title || 'Cita';
+      const aptTitle = aptInfo[0]?.service_name || 'Cita';
 
       await createSystemNotification(foundTenant, {
         type: 'appointment_confirmed',
@@ -95,11 +95,11 @@ export async function confirmAppointmentPublicGet(req: Request, res: Response) {
     // --- NOTIFICACIÓN AL GESTOR ---
     try {
       const [aptInfo] = await db.query<RowDataPacket[]>(
-        `SELECT a.title, c.first_name, c.last_name FROM \`${foundTenant}\`.appointments a 
+        `SELECT a.service_name, c.first_name, c.last_name FROM \`${foundTenant}\`.appointments a 
          JOIN \`${foundTenant}\`.customers c ON a.customer_id = c.id WHERE a.id = ?`, [id]
       );
       const customerName = aptInfo[0] ? `${aptInfo[0].first_name} ${aptInfo[0].last_name}` : 'Cliente';
-      const aptTitle = aptInfo[0]?.title || 'Cita';
+      const aptTitle = aptInfo[0]?.service_name || 'Cita';
 
       await createSystemNotification(foundTenant, {
         type: 'appointment_confirmed',
@@ -133,9 +133,9 @@ export async function getAppointmentPublicDetails(req: Request, res: Response) {
           `SELECT 
             a.id, 
             a.start_at, 
-            a.title,
+            a.service_name,
             c.first_name AS customer_name,
-            s.name AS service_name,
+            s.name AS service_name_ref,
             st.first_name AS specialist_name,
             st.last_name AS specialist_last_name,
             bs.address AS business_address
@@ -163,7 +163,7 @@ export async function getAppointmentPublicDetails(req: Request, res: Response) {
             date: apt.start_at,
             customerName: apt.customer_name,
             businessName: bizName,
-            serviceName: (apt.service_name || apt.title || 'Servicio Profesional').replace(/^\[BORRADO\] /, '').replace(/ \(\d{6}\)$/, ''),
+            serviceName: (apt.service_name || apt.service_name_ref || 'Servicio Profesional').replace(/^\[BORRADO\] /, '').replace(/ \(\d{6}\)$/, ''),
             specialistName: `${apt.specialist_name || ''} ${apt.specialist_last_name || ''}`.trim() || 'Especialista asignado',
             businessAddress: apt.business_address || 'Dirección por confirmar'
           });
