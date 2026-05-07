@@ -19,6 +19,7 @@ import { salesRouter } from './routes/sales.routes';
 import { inventoryRouter } from './routes/inventory.routes';
 import { notificationsRouter } from './routes/notifications.routes';
 import { integrationsRouter } from './routes/integrations.routes';
+import { reportsRouter } from './routes/reports.routes';
 import { globalErrorHandler } from './middleware/error.middleware';
 import cron from 'node-cron';
 import { runRemindersJob, printTestConfirmationLinks } from './jobs/appointmentReminders';
@@ -66,6 +67,7 @@ app.use('/api/sales', salesRouter);
 app.use('/api/inventory', inventoryRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/integrations', integrationsRouter);
+app.use('/api/reports', reportsRouter);
 
 app.use(globalErrorHandler);
 
