@@ -20,6 +20,7 @@ import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
 import { SseManager } from '../utils/sse.manager';
 import { GoogleCalendarService } from '../services/google-calendar.service';
+import { WhatsAppService } from '../services/whatsapp.service';
 
 type CitaEstado = 'pendiente' | 'confirmada' | 'completada' | 'cancelada';
 
@@ -191,6 +192,20 @@ export const AppointmentsController = {
       const apiAppointment = toApiAppointment(appointment);
       SseManager.broadcast(req.user.id, 'appointments_updated', { action: 'create', appointment: apiAppointment });
       
+      // Enviar confirmación por WhatsApp si hay teléfono
+      if (apiAppointment.clienteTelefono) {
+        let cleanPhone = apiAppointment.clienteTelefono.replace(/\D/g, '');
+        if (cleanPhone.length === 10) cleanPhone = '52' + cleanPhone;
+        
+        WhatsAppService.sendAppointmentConfirmation(
+          cleanPhone,
+          apiAppointment.clienteNombre,
+          apiAppointment.servicio,
+          apiAppointment.fecha,
+          apiAppointment.hora
+        ).catch(err => console.error('Error enviando confirmación WA:', err));
+      }
+
       // Sincronizar asincrónicamente con Google Calendar
       GoogleCalendarService.pushEvent(req.user.id, apiAppointment as any, 'create').catch(console.error);
 
