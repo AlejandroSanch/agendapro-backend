@@ -3,6 +3,7 @@ import { getControlPool } from '../data/db';
 import { RowDataPacket } from 'mysql2/promise';
 import { createSystemNotification } from '../data/repositories/notification.repository';
 import { q } from '../data/utils';
+import { env } from '../config/env';
 
 /**
  * Confirma una cita de forma pública (sin auth) usando su ID.
@@ -66,7 +67,7 @@ export async function confirmAppointmentPublic(req: Request, res: Response) {
  */
 export async function confirmAppointmentPublicGet(req: Request, res: Response) {
   const { id } = req.params;
-  const frontendUrl = process.env.APP_URL || 'http://localhost:4200';
+  const frontendUrl = env.frontendBaseUrl;
 
   try {
     const db = getControlPool();

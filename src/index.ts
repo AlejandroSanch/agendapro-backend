@@ -42,7 +42,7 @@ app.use(
     credentials: false,
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
 app.get('/', (_req, res) => {
   res.json({ message: 'AgendaPro backend running v2.' });

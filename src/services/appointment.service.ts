@@ -1,12 +1,4 @@
 import {
-  createAppointment,
-  findAppointmentById,
-  updateAppointment,
-  UpsertAppointmentInput,
-  UpdateAppointmentInput,
-  AppointmentRecord,
-} from '../data/repositories/appointment.repository';
-import {
   getBusinessSettings,
   isHolidayClosure,
   BusinessSchedule,

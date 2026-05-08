@@ -19,7 +19,7 @@ export async function ensureControlDatabaseAndPool(): Promise<void> {
     user: env.mysqlUser,
     password: env.mysqlPassword,
     waitForConnections: true,
-    connectionLimit: Math.max(1, env.mysqlConnectionLimit),
+    connectionLimit: 1,
     queueLimit: 0,
   });
 
