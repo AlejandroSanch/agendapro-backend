@@ -25,18 +25,13 @@ export const SalesController = {
       })),
     };
 
-    try {
-      const saleId = await createSale(req.user.id, payload);
-      if (!saleId) throw new ApiError(500, 'No se pudo procesar la venta.');
-      
-      res.status(201).json({ 
-        ok: true, 
-        saleId,
-        message: 'Checkout completado con éxito.'
-      });
-    } catch (error) {
-      console.error('Checkout error:', error);
-      throw new ApiError(500, 'Error interno al procesar el checkout.');
-    }
+    const saleId = await createSale(req.user.id, payload);
+    if (!saleId) throw new ApiError(500, 'No se pudo procesar la venta.');
+    
+    res.status(201).json({ 
+      ok: true, 
+      saleId,
+      message: 'Checkout completado con éxito.'
+    });
   }),
 };

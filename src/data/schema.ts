@@ -108,8 +108,12 @@ export async function ensureTenantSchema(tenantDbName: string): Promise<void> {
   }
 
   // Ahora que la BD existe físicamente en MySQL, inyectamos a Umzug
-  const migrator = getTenantMigrator(tenantDbName);
-  await migrator.up();
+  const { migrator, pool } = getTenantMigrator(tenantDbName);
+  try {
+    await migrator.up();
+  } finally {
+    await pool.end();
+  }
 }
 
 async function migrateLegacySharedTablesToTenantDbs(): Promise<void> {

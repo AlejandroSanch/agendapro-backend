@@ -10,10 +10,6 @@ export function getControlPool(): Pool {
   return controlPool;
 }
 
-export function q(identifier: string): string {
-  return `\`${String(identifier).replace(/`/g, '``')}\``;
-}
-
 export async function ensureControlDatabaseAndPool(): Promise<void> {
   if (controlPool) return;
 
@@ -29,7 +25,7 @@ export async function ensureControlDatabaseAndPool(): Promise<void> {
 
   try {
     await adminPool.query(
-      `CREATE DATABASE IF NOT EXISTS ${q(env.mysqlDatabase)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+      `CREATE DATABASE IF NOT EXISTS ${mysql.escapeId(env.mysqlDatabase)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
     );
   } finally {
     await adminPool.end();

@@ -64,8 +64,6 @@ export const StaffController = {
     const params = staffIdParamSchema.parse(req.params);
     const data = updateStaffSchema.parse(req.body);
 
-    console.log('Update Staff Data Received:', JSON.stringify(data, null, 2));
-
     try {
       const updated = await updateStaff(req.user.id, params.id, data);
       if (!updated) throw new ApiError(404, 'Empleado no encontrado.');

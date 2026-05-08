@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { getControlPool } from '../data/db';
 import { RowDataPacket } from 'mysql2/promise';
 import { createSystemNotification } from '../data/repositories/notification.repository';
+import { q } from '../data/utils';
 
 /**
  * Confirma una cita de forma pública (sin auth) usando su ID.
@@ -16,7 +17,7 @@ export async function confirmAppointmentPublic(req: Request, res: Response) {
     let foundTenant = '';
     for (const t of tenants) {
       const [rows] = await db.query<RowDataPacket[]>(
-        `SELECT id FROM \`${t.tenant_db_name}\`.appointments WHERE id = ? LIMIT 1`,
+        `SELECT id FROM ${q(t.tenant_db_name)}.appointments WHERE id = ? LIMIT 1`,
         [id]
       );
       if (rows.length > 0) {
@@ -30,15 +31,15 @@ export async function confirmAppointmentPublic(req: Request, res: Response) {
     }
 
     await db.query(
-      `UPDATE \`${foundTenant}\`.appointments SET status = 'confirmed', updated_at = NOW() WHERE id = ?`,
+      `UPDATE ${q(foundTenant)}.appointments SET status = 'confirmed', updated_at = NOW() WHERE id = ?`,
       [id]
     );
 
     // --- NOTIFICACIÓN AL GESTOR ---
     try {
       const [aptInfo] = await db.query<RowDataPacket[]>(
-        `SELECT a.service_name, c.first_name, c.last_name FROM \`${foundTenant}\`.appointments a 
-         JOIN \`${foundTenant}\`.customers c ON a.customer_id = c.id WHERE a.id = ?`, [id]
+        `SELECT a.service_name, c.first_name, c.last_name FROM ${q(foundTenant)}.appointments a 
+         JOIN ${q(foundTenant)}.customers c ON a.customer_id = c.id WHERE a.id = ?`, [id]
       );
       const customerName = aptInfo[0] ? `${aptInfo[0].first_name} ${aptInfo[0].last_name}` : 'Cliente';
       const aptTitle = aptInfo[0]?.service_name || 'Cita';
@@ -74,7 +75,7 @@ export async function confirmAppointmentPublicGet(req: Request, res: Response) {
     let foundTenant = '';
     for (const t of tenants) {
       const [rows] = await db.query<RowDataPacket[]>(
-        `SELECT id FROM \`${t.tenant_db_name}\`.appointments WHERE id = ? LIMIT 1`,
+        `SELECT id FROM ${q(t.tenant_db_name)}.appointments WHERE id = ? LIMIT 1`,
         [id]
       );
       if (rows.length > 0) {
@@ -88,15 +89,15 @@ export async function confirmAppointmentPublicGet(req: Request, res: Response) {
     }
 
     await db.query(
-      `UPDATE \`${foundTenant}\`.appointments SET status = 'confirmed', updated_at = NOW() WHERE id = ?`,
+      `UPDATE ${q(foundTenant)}.appointments SET status = 'confirmed', updated_at = NOW() WHERE id = ?`,
       [id]
     );
 
     // --- NOTIFICACIÓN AL GESTOR ---
     try {
       const [aptInfo] = await db.query<RowDataPacket[]>(
-        `SELECT a.service_name, c.first_name, c.last_name FROM \`${foundTenant}\`.appointments a 
-         JOIN \`${foundTenant}\`.customers c ON a.customer_id = c.id WHERE a.id = ?`, [id]
+        `SELECT a.service_name, c.first_name, c.last_name FROM ${q(foundTenant)}.appointments a 
+         JOIN ${q(foundTenant)}.customers c ON a.customer_id = c.id WHERE a.id = ?`, [id]
       );
       const customerName = aptInfo[0] ? `${aptInfo[0].first_name} ${aptInfo[0].last_name}` : 'Cliente';
       const aptTitle = aptInfo[0]?.service_name || 'Cita';
@@ -139,12 +140,12 @@ export async function getAppointmentPublicDetails(req: Request, res: Response) {
             st.first_name AS specialist_name,
             st.last_name AS specialist_last_name,
             bs.address AS business_address
-          FROM \`${t.tenant_db_name}\`.appointments a
-          JOIN \`${t.tenant_db_name}\`.customers c ON a.customer_id = c.id
-          LEFT JOIN \`${t.tenant_db_name}\`.appointment_services aps ON a.id = aps.appointment_id
-          LEFT JOIN \`${t.tenant_db_name}\`.services s ON aps.service_id = s.id
-          LEFT JOIN \`${t.tenant_db_name}\`.staff st ON aps.staff_id = st.id
-          LEFT JOIN \`${t.tenant_db_name}\`.business_settings bs ON bs.id = 1
+          FROM ${q(t.tenant_db_name)}.appointments a
+          JOIN ${q(t.tenant_db_name)}.customers c ON a.customer_id = c.id
+          LEFT JOIN ${q(t.tenant_db_name)}.appointment_services aps ON a.id = aps.appointment_id
+          LEFT JOIN ${q(t.tenant_db_name)}.services s ON aps.service_id = s.id
+          LEFT JOIN ${q(t.tenant_db_name)}.staff st ON aps.staff_id = st.id
+          LEFT JOIN ${q(t.tenant_db_name)}.business_settings bs ON bs.id = 1
           WHERE a.id = ?
           LIMIT 1`,
           [id]

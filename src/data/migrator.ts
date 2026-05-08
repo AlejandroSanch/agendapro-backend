@@ -69,8 +69,9 @@ export function getControlMigrator(): Umzug<MigrationContext> {
 /**
  * Devuelve un migrador instanciado y conectado on-the-fly para una DB de Tenant específica.
  * Utiliza un conector dedicado independiente.
+ * IMPORTANTE: El caller debe cerrar el pool devuelto después de completar las migraciones.
  */
-export function getTenantMigrator(tenantDbName: string): Umzug<MigrationContext> {
+export function getTenantMigrator(tenantDbName: string): { migrator: Umzug<MigrationContext>; pool: mysql.Pool } {
   // Utilizamos la misma arquitectura que usamos explícitamente en createTenantPool,
   // con un pool transitorio para las migraciones de este tenant.
   const pool = mysql.createPool({
@@ -84,5 +85,5 @@ export function getTenantMigrator(tenantDbName: string): Umzug<MigrationContext>
     queueLimit: 0,
   });
 
-  return buildUmzug(pool, tenantDbName, 'migrations/tenant/*.{ts,js}');
+  return { migrator: buildUmzug(pool, tenantDbName, 'migrations/tenant/*.{ts,js}'), pool };
 }

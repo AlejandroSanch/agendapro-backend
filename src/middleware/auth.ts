@@ -45,8 +45,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     req.user = sanitizeUser(user);
     next();
-  } catch (err: any) {
-    require('fs').appendFileSync('debug_auth.log', `[${new Date().toISOString()}] Auth failed: ${err.message || 'Unknown error'}\n`);
+  } catch {
     res.status(401).json({ error: 'Token invalido o expirado.' });
   }
 }

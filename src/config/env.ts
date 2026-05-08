@@ -46,3 +46,15 @@ export const env = {
   whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
   whatsappAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || '',
 };
+
+// Validaciones críticas de seguridad al arrancar
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET) {
+    console.error('❌ FATAL: JWT_SECRET no está configurado. No se puede iniciar en producción sin un secret seguro.');
+    process.exit(1);
+  }
+  if (env.storePlaintextPasswords) {
+    console.error('❌ FATAL: STORE_PLAINTEXT_PASSWORDS está activado en producción. Esto es un riesgo de seguridad crítico.');
+    process.exit(1);
+  }
+}

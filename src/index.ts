@@ -22,7 +22,7 @@ import { integrationsRouter } from './routes/integrations.routes';
 import { reportsRouter } from './routes/reports.routes';
 import { globalErrorHandler } from './middleware/error.middleware';
 import cron from 'node-cron';
-import { runRemindersJob, printTestConfirmationLinks } from './jobs/appointmentReminders';
+import { runRemindersJob } from './jobs/appointmentReminders';
 import { globalLimiter } from './middleware/rate-limit';
 
 const app = express();

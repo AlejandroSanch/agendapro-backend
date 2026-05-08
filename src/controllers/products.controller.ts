@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import {
   createProduct,
+  createProductsBulk,
   deleteProduct,
   listProducts,
   ProductRecord,
   updateProduct,
 } from '../data/repositories/product.repository';
-import { createProductSchema, productIdParamSchema, updateProductSchema } from '../validators/products.validators';
+import { createProductSchema, createProductBulkSchema, productIdParamSchema, updateProductSchema } from '../validators/products.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
 
@@ -31,7 +32,6 @@ export const ProductsController = {
     if (!req.user) throw new ApiError(401, 'No autorizado.');
     
     const products = await listProducts(req.user.id);
-    require('fs').appendFileSync('debug_list.log', `[${new Date().toISOString()}] User: ${req.user.id}, Count: ${products.length}\n`);
     res.json({ products: products.map(toApiProduct) });
   }),
 
@@ -83,10 +83,6 @@ export const ProductsController = {
 
   createBulk: asyncWrapper(async (req: Request, res: Response) => {
     if (!req.user) throw new ApiError(401, 'No autorizado.');
-    
-    // Using require here to avoid import issues for the bulk schema if it wasn't exported earlier
-    const { createProductBulkSchema } = require('../validators/products.validators');
-    const { createProductsBulk } = require('../data/repositories/product.repository');
 
     const items = createProductBulkSchema.parse(req.body);
 

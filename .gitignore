@@ -2,3 +2,14 @@ node_modules
 dist
 .env
 storage
+
+# Debug & scratch files
+*.log
+debug_*.log
+scratch/
+scratch_*.js
+ts_errors.txt
+email_preview.html
+
+# IDE
+.vscode/
