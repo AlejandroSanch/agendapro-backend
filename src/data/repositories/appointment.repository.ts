@@ -101,6 +101,15 @@ export async function listAppointments(
   return rows.map(toAppointmentRecord);
 }
 
+export async function findAppointmentById(
+  userId: string,
+  appointmentId: string
+): Promise<AppointmentRecord | null> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return null;
+  return getAppointmentById(tenantDbName, appointmentId);
+}
+
 export async function createAppointment(
   userId: string,
   input: UpsertAppointmentInput

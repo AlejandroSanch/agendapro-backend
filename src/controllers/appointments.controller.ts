@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import {
   createAppointment,
+  findAppointmentById,
   listAppointments,
   updateAppointment,
 } from '../data/repositories/appointment.repository';
@@ -237,8 +238,7 @@ export const AppointmentsController = {
     if (data.trabajador !== undefined) payload.trabajador = data.trabajador;
 
     // Obtener la cita actual para combinar los datos y poder validarla
-    const appointmentsCurrent = await listAppointments(req.user.id);
-    const currentApt = appointmentsCurrent.find(a => a.id === params.id);
+    const currentApt = await findAppointmentById(req.user.id, params.id);
     if (!currentApt) throw new ApiError(404, 'Cita no encontrada.');
 
     const mergedDate = data.fecha ?? currentApt.date;
