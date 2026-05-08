@@ -5,6 +5,54 @@ import { createSystemNotification } from '../data/repositories/notification.repo
 import { q } from '../data/utils';
 import { env } from '../config/env';
 
+// ── Helper: Resolve tenant from appointment ID ──────────────────────────────
+
+interface TenantMapRow extends RowDataPacket {
+  tenant_db_name: string;
+}
+
+/**
+ * Finds the tenant DB name for a given appointment ID.
+ * First checks the lookup table (O(1)), then falls back to scanning all tenants.
+ * If found via scan, backfills the lookup table for future requests.
+ */
+async function resolveTenantForAppointment(appointmentId: string): Promise<string | null> {
+  const db = getControlPool();
+
+  // 1. Fast path: lookup table
+  const [mapRows] = await db.query<TenantMapRow[]>(
+    `SELECT tenant_db_name FROM appointment_tenant_map WHERE appointment_id = ? LIMIT 1`,
+    [appointmentId]
+  );
+  if (mapRows[0]) return mapRows[0].tenant_db_name;
+
+  // 2. Slow path: scan all tenants (for appointments created before the lookup table existed)
+  const [tenants] = await db.query<RowDataPacket[]>(
+    'SELECT tenant_db_name FROM users WHERE tenant_db_name IS NOT NULL'
+  );
+
+  for (const t of tenants) {
+    const [rows] = await db.query<RowDataPacket[]>(
+      `SELECT id FROM ${q(t.tenant_db_name)}.appointments WHERE id = ? LIMIT 1`,
+      [appointmentId]
+    );
+    if (rows.length > 0) {
+      // Backfill lookup table for future requests
+      try {
+        await db.query(
+          `INSERT IGNORE INTO appointment_tenant_map (appointment_id, tenant_db_name) VALUES (?, ?)`,
+          [appointmentId, t.tenant_db_name]
+        );
+      } catch { /* non-critical */ }
+      return t.tenant_db_name;
+    }
+  }
+
+  return null;
+}
+
+// ── Public endpoints ─────────────────────────────────────────────────────────
+
 /**
  * Confirma una cita de forma pública (sin auth) usando su ID.
  */
@@ -12,25 +60,12 @@ export async function confirmAppointmentPublic(req: Request, res: Response) {
   const { id } = req.params;
 
   try {
-    const db = getControlPool();
-    const [tenants] = await db.query<RowDataPacket[]>('SELECT tenant_db_name FROM users WHERE tenant_db_name IS NOT NULL');
-
-    let foundTenant = '';
-    for (const t of tenants) {
-      const [rows] = await db.query<RowDataPacket[]>(
-        `SELECT id FROM ${q(t.tenant_db_name)}.appointments WHERE id = ? LIMIT 1`,
-        [id]
-      );
-      if (rows.length > 0) {
-        foundTenant = t.tenant_db_name;
-        break;
-      }
-    }
-
+    const foundTenant = await resolveTenantForAppointment(id);
     if (!foundTenant) {
       return res.status(404).json({ message: 'Cita no encontrada.' });
     }
 
+    const db = getControlPool();
     await db.query(
       `UPDATE ${q(foundTenant)}.appointments SET status = 'confirmed', updated_at = NOW() WHERE id = ?`,
       [id]
@@ -70,25 +105,12 @@ export async function confirmAppointmentPublicGet(req: Request, res: Response) {
   const frontendUrl = env.frontendBaseUrl;
 
   try {
-    const db = getControlPool();
-    const [tenants] = await db.query<RowDataPacket[]>('SELECT tenant_db_name FROM users WHERE tenant_db_name IS NOT NULL');
-
-    let foundTenant = '';
-    for (const t of tenants) {
-      const [rows] = await db.query<RowDataPacket[]>(
-        `SELECT id FROM ${q(t.tenant_db_name)}.appointments WHERE id = ? LIMIT 1`,
-        [id]
-      );
-      if (rows.length > 0) {
-        foundTenant = t.tenant_db_name;
-        break;
-      }
-    }
-
+    const foundTenant = await resolveTenantForAppointment(id);
     if (!foundTenant) {
       return res.redirect(`${frontendUrl}/confirmar-cita/${id}?error=not_found`);
     }
 
+    const db = getControlPool();
     await db.query(
       `UPDATE ${q(foundTenant)}.appointments SET status = 'confirmed', updated_at = NOW() WHERE id = ?`,
       [id]
@@ -113,7 +135,6 @@ export async function confirmAppointmentPublicGet(req: Request, res: Response) {
       console.error('Error creating system notification:', err);
     }
 
-    // Redirigir al frontend con confirmación exitosa
     res.redirect(`${frontendUrl}/confirmar-cita/${id}?confirmed=true`);
   } catch (error) {
     console.error('Error confirming appointment via GET:', error);
@@ -123,62 +144,58 @@ export async function confirmAppointmentPublicGet(req: Request, res: Response) {
 
 export async function getAppointmentPublicDetails(req: Request, res: Response) {
   const { id } = req.params;
-  console.log(`🔍 [Public-Details] Searching for appointment ID: ${id}`);
 
   try {
-    const db = getControlPool();
-    const [tenants] = await db.query<RowDataPacket[]>('SELECT tenant_db_name FROM users WHERE tenant_db_name IS NOT NULL');
-
-    for (const t of tenants) {
-      try {
-        const [rows] = await db.query<RowDataPacket[]>(
-          `SELECT 
-            a.id, 
-            a.start_at, 
-            a.service_name,
-            c.first_name AS customer_name,
-            s.name AS service_name_ref,
-            st.first_name AS specialist_name,
-            st.last_name AS specialist_last_name,
-            bs.address AS business_address
-          FROM ${q(t.tenant_db_name)}.appointments a
-          JOIN ${q(t.tenant_db_name)}.customers c ON a.customer_id = c.id
-          LEFT JOIN ${q(t.tenant_db_name)}.appointment_services aps ON a.id = aps.appointment_id
-          LEFT JOIN ${q(t.tenant_db_name)}.services s ON aps.service_id = s.id
-          LEFT JOIN ${q(t.tenant_db_name)}.staff st ON aps.staff_id = st.id
-          LEFT JOIN ${q(t.tenant_db_name)}.business_settings bs ON bs.id = 1
-          WHERE a.id = ?
-          LIMIT 1`,
-          [id]
-        );
-
-        if (rows.length > 0) {
-          const apt = rows[0];
-          console.log(`✅ [Public-Details] Found in tenant: ${t.tenant_db_name}`);
-          
-          // Buscamos el nombre del negocio en la tabla users
-          const [userRows] = await db.query<RowDataPacket[]>('SELECT business_name, name FROM users WHERE tenant_db_name = ?', [t.tenant_db_name]);
-          const bizName = userRows[0]?.business_name || userRows[0]?.name || 'AgendaPro Business';
-
-          return res.json({
-            id: apt.id,
-            date: apt.start_at,
-            customerName: apt.customer_name,
-            businessName: bizName,
-            serviceName: (apt.service_name || apt.service_name_ref || 'Servicio Profesional').replace(/^\[BORRADO\] /, '').replace(/ \(\d{6}\)$/, ''),
-            specialistName: `${apt.specialist_name || ''} ${apt.specialist_last_name || ''}`.trim() || 'Especialista asignado',
-            businessAddress: apt.business_address || 'Dirección por confirmar'
-          });
-        }
-      } catch (e) {
-        console.error(`❌ [Public-Details] Error in tenant ${t.tenant_db_name}:`, e);
-      }
+    const foundTenant = await resolveTenantForAppointment(id);
+    if (!foundTenant) {
+      return res.status(404).json({ message: 'Cita no encontrada.' });
     }
 
-    console.warn(`⚠️ [Public-Details] Appointment not found in any tenant.`);
-    res.status(404).json({ message: 'Cita no encontrada.' });
+    const db = getControlPool();
+    const [rows] = await db.query<RowDataPacket[]>(
+      `SELECT 
+        a.id, 
+        a.start_at, 
+        a.service_name,
+        c.first_name AS customer_name,
+        s.name AS service_name_ref,
+        st.first_name AS specialist_name,
+        st.last_name AS specialist_last_name,
+        bs.address AS business_address
+      FROM ${q(foundTenant)}.appointments a
+      JOIN ${q(foundTenant)}.customers c ON a.customer_id = c.id
+      LEFT JOIN ${q(foundTenant)}.appointment_services aps ON a.id = aps.appointment_id
+      LEFT JOIN ${q(foundTenant)}.services s ON aps.service_id = s.id
+      LEFT JOIN ${q(foundTenant)}.staff st ON aps.staff_id = st.id
+      LEFT JOIN ${q(foundTenant)}.business_settings bs ON bs.id = 1
+      WHERE a.id = ?
+      LIMIT 1`,
+      [id]
+    );
+
+    if (!rows[0]) {
+      return res.status(404).json({ message: 'Cita no encontrada.' });
+    }
+
+    const apt = rows[0];
+
+    // Nombre del negocio
+    const [userRows] = await db.query<RowDataPacket[]>(
+      'SELECT business_name, name FROM users WHERE tenant_db_name = ?', [foundTenant]
+    );
+    const bizName = userRows[0]?.business_name || userRows[0]?.name || 'AgendaPro Business';
+
+    res.json({
+      id: apt.id,
+      date: apt.start_at,
+      customerName: apt.customer_name,
+      businessName: bizName,
+      serviceName: (apt.service_name || apt.service_name_ref || 'Servicio Profesional').replace(/^\[BORRADO\] /, '').replace(/ \(\d{6}\)$/, ''),
+      specialistName: `${apt.specialist_name || ''} ${apt.specialist_last_name || ''}`.trim() || 'Especialista asignado',
+      businessAddress: apt.business_address || 'Dirección por confirmar'
+    });
   } catch (error) {
-    console.error('❌ [Public-Details] Global error:', error);
+    console.error('Error fetching public appointment details:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 }

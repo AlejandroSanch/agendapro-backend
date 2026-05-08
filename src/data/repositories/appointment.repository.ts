@@ -192,6 +192,15 @@ export async function createAppointment(
     );
 
     await connection.commit();
+
+    // Register in control DB lookup table for O(1) public access
+    try {
+      await db.query(
+        `INSERT IGNORE INTO appointment_tenant_map (appointment_id, tenant_db_name) VALUES (?, ?)`,
+        [appointmentId, tenantDbName]
+      );
+    } catch { /* Non-critical: public confirmation will fallback to scan */ }
+
     return getAppointmentById(tenantDbName, appointmentId);
   } catch (error) {
     await connection.rollback();
