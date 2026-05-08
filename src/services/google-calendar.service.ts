@@ -115,11 +115,11 @@ export const GoogleCalendarService = {
         description: `Cliente: ${appointment.clienteNombre}\nTeléfono: ${appointment.clienteTelefono}\nNotas: ${appointment.notas || 'N/A'}\nEspecialista: ${appointment.trabajador || 'Sin asignar'}`,
         start: {
           dateTime: startDate.toISOString(),
-          timeZone: 'UTC', // Assuming UTC or let Google guess, better yet let's just use the Date object ISO string which has UTC offset
+          timeZone: 'America/Mexico_City',
         },
         end: {
           dateTime: endDate.toISOString(),
-          timeZone: 'UTC',
+          timeZone: 'America/Mexico_City',
         },
       };
 

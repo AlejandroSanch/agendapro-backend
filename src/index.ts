@@ -78,10 +78,33 @@ async function bootstrap(): Promise<void> {
     // Start cron jobs
     cron.schedule('0 * * * *', runRemindersJob); // Runs at minute 0 past every hour
 
-    app.listen(env.port, '0.0.0.0', () => {
+    const server = app.listen(env.port, '0.0.0.0', () => {
       console.log(`AgendaPro backend listening on all interfaces at port ${env.port}`);
       console.log(`- Local: http://localhost:${env.port}`);
     });
+
+    // Graceful shutdown
+    const shutdown = async (signal: string) => {
+      console.log(`\n🛑 ${signal} received. Shutting down gracefully...`);
+      server.close(async () => {
+        try {
+          const { getControlPool } = require('./data/db');
+          const pool = getControlPool();
+          await pool.end();
+          console.log('✅ MySQL pool closed.');
+        } catch { /* pool may not be initialized */ }
+        process.exit(0);
+      });
+
+      // Force exit after 10s if graceful shutdown fails
+      setTimeout(() => {
+        console.error('⚠️ Forced shutdown after timeout.');
+        process.exit(1);
+      }, 10_000);
+    };
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
   } catch (error) {
     console.error('No se pudo inicializar la base de datos MySQL.');
     console.error(error);
@@ -90,4 +113,3 @@ async function bootstrap(): Promise<void> {
 }
 
 void bootstrap();
- 

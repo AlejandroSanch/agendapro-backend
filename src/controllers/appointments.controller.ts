@@ -5,11 +5,6 @@ import {
   listAppointments,
   updateAppointment,
 } from '../data/repositories/appointment.repository';
-import { 
-  getBusinessSettings, 
-  isHolidayClosure 
-} from '../data/repositories/settings.repository';
-import { listStaff } from '../data/repositories/staff.repository';
 import { AppointmentStatusDb } from '../data/utils';
 import {
   appointmentIdParamSchema,
@@ -22,6 +17,9 @@ import { ApiError } from '../utils/ApiError';
 import { SseManager } from '../utils/sse.manager';
 import { GoogleCalendarService } from '../services/google-calendar.service';
 import { WhatsAppService } from '../services/whatsapp.service';
+import { AppointmentService } from '../services/appointment.service';
+
+// ── Status mapping ───────────────────────────────────────────────────────────
 
 type CitaEstado = 'pendiente' | 'confirmada' | 'completada' | 'cancelada';
 
@@ -40,6 +38,8 @@ const statusFromDb: Record<AppointmentStatusDb, CitaEstado> = {
   no_show: 'cancelada',
 };
 
+// ── API transformation ───────────────────────────────────────────────────────
+
 function toApiAppointment(appointment: any) {
   return {
     id: appointment.id,
@@ -47,8 +47,7 @@ function toApiAppointment(appointment: any) {
     clienteTelefono: appointment.customerPhone,
     servicio: (() => {
       const original = appointment.serviceName || '';
-      const cleaned = original.replace(/^\[BORRADO\]\s+/i, '').replace(/\s+\(\d+\)$/, '');
-      return cleaned;
+      return original.replace(/^\[BORRADO\]\s+/i, '').replace(/\s+\(\d+\)$/, '');
     })(),
     duracionMin: appointment.durationMin,
     fecha: appointment.date,
@@ -62,6 +61,8 @@ function toApiAppointment(appointment: any) {
     })(),
   };
 }
+
+// ── Controller ───────────────────────────────────────────────────────────────
 
 export const AppointmentsController = {
   stream: asyncWrapper(async (req: Request, res: Response) => {
@@ -94,84 +95,14 @@ export const AppointmentsController = {
     if (!req.user) throw new ApiError(401, 'No autorizado.');
 
     const data = createAppointmentSchema.parse(req.body);
-    
-    // Validaciones de alta prioridad
-    const now = new Date();
-    const startAt = new Date(`${data.fecha}T${data.hora}:00`);
 
-    // 1. Bloquear fechas pasadas (con un margen de 1 minuto para evitar problemas de red)
-    if (startAt.getTime() < (now.getTime() - 60000)) {
-       throw new ApiError(400, 'No se puede crear una cita en el pasado.');
-    }
-
-    // 2. Verificar feriados/cierres
-    const isHoliday = await isHolidayClosure(req.user.id, data.fecha);
-    if (isHoliday) {
-      throw new ApiError(400, 'El negocio está cerrado por feriado o mantenimiento este día.');
-    }
-
-    // 3. Verificar horario comercial (Inicio y Fin)
-    const settings = await getBusinessSettings(req.user.id);
-    if (settings) {
-      const dateDate = new Date(`${data.fecha}T00:00:00`);
-      let dayOfWeek = dateDate.getDay(); // 0=Dom, 1=Lun... 6=Sab
-      
-      // JS: 0=Dom, 1=Lun, ..., 6=Sab
-      // DB: 0=Lun, 1=Mar, ..., 5=Sab, 6=Dom (ver SettingsRepository: map(h => ({ day: h.day_of_week })))
-      const jsToDbDay: Record<number, number> = { 0: 6, 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5 };
-      const dbDay = jsToDbDay[dayOfWeek];
-      const schedule = settings.schedules.find(s => s.day === dbDay);
-
-      if (!schedule || !schedule.open) {
-        throw new ApiError(400, 'El negocio está cerrado en el día seleccionado.');
-      }
-
-      const toMinutes = (time: string) => {
-        const [h, m] = time.split(':').map(Number);
-        return h * 60 + m;
-      };
-
-      const startMinCurrent = toMinutes(data.hora);
-      const endMinCurrent = startMinCurrent + data.duracionMin;
-      const openMin = toMinutes(schedule.from);
-      const closeMin = toMinutes(schedule.to);
-
-      if (startMinCurrent < openMin || endMinCurrent > closeMin) {
-        throw new ApiError(400, `La duración de la cita excede el horario comercial (${schedule.from} - ${schedule.to}).`);
-      }
-
-      // 4. Verificar horas de descanso (Break Time)
-      let breakStart: string | null = null;
-      let breakEnd: string | null = null;
-
-      if (data.trabajador) {
-        const staffList = await listStaff(req.user.id);
-        const staffMember = staffList.find(
-          s => s.nombre.toLowerCase().trim().replace(/\s+/g, ' ') === data.trabajador?.toLowerCase().trim().replace(/\s+/g, ' ')
-        );
-        if (staffMember?.descansoPropio) {
-          breakStart = staffMember.descansoDesde;
-          breakEnd = staffMember.descansoHasta;
-        } else if (settings.breakEnabled) {
-          breakStart = settings.breakStart;
-          breakEnd = settings.breakEnd;
-        }
-      } else if (settings.breakEnabled) {
-        breakStart = settings.breakStart;
-        breakEnd = settings.breakEnd;
-      }
-
-      if (breakStart && breakEnd) {
-        const breakStartMin = toMinutes(breakStart);
-        const breakEndMin = toMinutes(breakEnd);
-        if (breakStartMin !== null && breakEndMin !== null) {
-          // Si la cita empieza antes de que termine el descanso, y termina después de que empiece el descanso
-          if (startMinCurrent < breakEndMin && endMinCurrent > breakStartMin) {
-            throw new ApiError(400, `La cita coincide con el horario de descanso de ${breakStart} a ${breakEnd}.`);
-          }
-        }
-      }
-    }
+    // Validaciones de negocio delegadas al servicio
+    await AppointmentService.validateCreate(req.user.id, {
+      fecha: data.fecha,
+      hora: data.hora,
+      duracionMin: data.duracionMin,
+      trabajador: data.trabajador,
+    });
 
     const payload = {
       customerName: data.clienteNombre,
@@ -246,45 +177,13 @@ export const AppointmentsController = {
     const mergedDuration = data.duracionMin ?? currentApt.durationMin;
     const mergedTrabajador = data.trabajador ?? currentApt.trabajador;
 
-    const toMinutes = (timeStr: string) => {
-      const [h, m] = String(timeStr || '').split(':').map(Number);
-      return (h || 0) * 60 + (m || 0);
-    };
-
-    const startMinCurrent = toMinutes(mergedTime);
-    const endMinCurrent = startMinCurrent + mergedDuration;
-
-    const settings = await getBusinessSettings(req.user.id);
-    if (settings) {
-      let breakStart: string | null = null;
-      let breakEnd: string | null = null;
-
-      if (mergedTrabajador) {
-        const staffList = await listStaff(req.user.id);
-        const staffMember = staffList.find(
-          s => s.nombre.toLowerCase().trim().replace(/\s+/g, ' ') === mergedTrabajador?.toLowerCase().trim().replace(/\s+/g, ' ')
-        );
-        if (staffMember?.descansoPropio) {
-          breakStart = staffMember.descansoDesde;
-          breakEnd = staffMember.descansoHasta;
-        } else if (settings.breakEnabled) {
-          breakStart = settings.breakStart;
-          breakEnd = settings.breakEnd;
-        }
-      } else if (settings.breakEnabled) {
-        breakStart = settings.breakStart;
-        breakEnd = settings.breakEnd;
-      }
-
-      if (breakStart && breakEnd) {
-        const breakStartMin = toMinutes(breakStart);
-        const breakEndMin = toMinutes(breakEnd);
-        // Si la cita empieza antes de que termine el descanso, y termina después de que empiece el descanso
-        if (startMinCurrent < breakEndMin && endMinCurrent > breakStartMin) {
-          throw new ApiError(400, `La cita coincide con el horario de descanso de ${breakStart} a ${breakEnd}.`);
-        }
-      }
-    }
+    // Validaciones de negocio delegadas al servicio
+    await AppointmentService.validateUpdate(req.user.id, {
+      fecha: mergedDate,
+      hora: mergedTime,
+      duracionMin: mergedDuration,
+      trabajador: mergedTrabajador,
+    });
 
     try {
       const appointment = await updateAppointment(req.user.id, params.id, payload);
