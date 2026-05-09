@@ -6,6 +6,7 @@ import {
   listProducts,
   ProductRecord,
   updateProduct,
+  UpdateProductInput,
 } from '../data/repositories/product.repository';
 import { createProductSchema, createProductBulkSchema, productIdParamSchema, updateProductSchema } from '../validators/products.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
@@ -65,7 +66,7 @@ export const ProductsController = {
     const params = productIdParamSchema.parse(req.params);
     const data = updateProductSchema.parse(req.body);
 
-    const payload: any = {};
+    const payload: UpdateProductInput = {};
     if (data.nombre !== undefined) payload.name = data.nombre;
     if (data.sku !== undefined) payload.sku = data.sku;
     if (data.unidad !== undefined) payload.unit = data.unidad;

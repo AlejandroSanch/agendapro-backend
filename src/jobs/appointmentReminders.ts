@@ -1,4 +1,4 @@
-import { RowDataPacket } from 'mysql2/promise';
+import { Pool, RowDataPacket } from 'mysql2/promise';
 import { getControlPool } from '../data/db';
 import { q } from '../data/utils';
 import { env } from '../config/env';
@@ -86,7 +86,7 @@ export async function runRemindersJob() {
                 const htmlBody = buildAppointmentReminderHtml(templateParams);
                 await sendMail(apt.customer_email, subject, textBody, htmlBody);
                 await logNotification(controlDb, tenantDbName, apt.customer_id, apt.appointment_id, 'email', subject, textBody, 'sent');
-              } catch (e) { console.error('Email failed', (e as any).message); }
+              } catch (e) { console.error('Email failed', (e as Error).message); }
             }
           }
 
@@ -109,9 +109,10 @@ export async function runRemindersJob() {
 
                 await logNotification(controlDb, tenantDbName, apt.customer_id, apt.appointment_id, 'whatsapp', 'Recordatorio WA Meta', 'Template: appointment_reminder', 'sent');
                 console.log(`✅ WhatsApp sent to ${customerName} (${cleanPhone})`);
-              } catch (e: any) { 
-                console.error(`❌ WhatsApp failed for ${customerName}:`, e.message); 
-                await logNotification(controlDb, tenantDbName, apt.customer_id, apt.appointment_id, 'whatsapp', 'Recordatorio WA Meta', e.message, 'failed');
+              } catch (e: unknown) { 
+                const errMsg = e instanceof Error ? e.message : String(e);
+                console.error(`❌ WhatsApp failed for ${customerName}:`, errMsg); 
+                await logNotification(controlDb, tenantDbName, apt.customer_id, apt.appointment_id, 'whatsapp', 'Recordatorio WA Meta', errMsg, 'failed');
               }
             }
           }
@@ -126,15 +127,15 @@ export async function runRemindersJob() {
   }
 }
 
-async function notificationExists(db: any, tenant: string, aptId: string, channel: string): Promise<boolean> {
-  const [rows] = await db.query(
+async function notificationExists(db: Pool, tenant: string, aptId: string, channel: string): Promise<boolean> {
+  const [rows] = await db.query<RowDataPacket[]>(
     `SELECT 1 FROM ${q(tenant)}.notifications_log WHERE appointment_id = ? AND channel = ? AND status = 'sent' LIMIT 1`,
     [aptId, channel]
   );
-  return (rows as any[]).length > 0;
+  return rows.length > 0;
 }
 
-async function logNotification(db: any, tenant: string, custId: string, aptId: string, channel: string, subject: string, body: string, status: string) {
+async function logNotification(db: Pool, tenant: string, custId: string, aptId: string, channel: string, subject: string, body: string, status: string) {
   await db.query(
     `INSERT INTO ${q(tenant)}.notifications_log (customer_id, appointment_id, channel, subject, body, status, sent_at)
      VALUES (?, ?, ?, ?, ?, ?, NOW())`,

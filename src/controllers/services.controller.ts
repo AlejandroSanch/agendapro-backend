@@ -6,6 +6,7 @@ import {
   listServices,
   ServiceRecord,
   updateService,
+  UpdateServiceInput,
 } from '../data/repositories/service.repository';
 import { createServiceSchema, serviceIdParamSchema, updateServiceSchema } from '../validators/services.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
@@ -78,7 +79,7 @@ export const ServicesController = {
     const params = serviceIdParamSchema.parse(req.params);
     const data = updateServiceSchema.parse(req.body);
 
-    const payload: any = {};
+    const payload: UpdateServiceInput = {};
     if (data.nombre !== undefined) payload.name = data.nombre;
     if (data.duracionMin !== undefined) payload.durationMin = data.duracionMin;
     if (data.precio !== undefined) payload.priceCents = Math.round(data.precio * 100);

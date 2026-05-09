@@ -5,6 +5,7 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  UpdateCategoryInput,
 } from '../data/repositories/category.repository';
 import {
   createCategorySchema,
@@ -53,7 +54,7 @@ export const CategoriesController = {
     const params = categoryIdParamSchema.parse(req.params);
     const data = updateCategorySchema.parse(req.body);
 
-    const payload: any = {};
+    const payload: UpdateCategoryInput = {};
     if (data.nombre !== undefined) payload.name = data.nombre;
     if (data.descripcion !== undefined) payload.description = data.descripcion;
     if (data.type !== undefined) payload.type = data.type;

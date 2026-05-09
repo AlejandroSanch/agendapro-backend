@@ -5,6 +5,18 @@ import { RowDataPacket } from 'mysql2/promise';
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar.events'];
 
+export interface CalendarAppointment {
+  id: string;
+  fecha: string;
+  hora: string;
+  duracionMin: number;
+  servicio: string;
+  clienteNombre: string;
+  clienteTelefono: string;
+  notas: string;
+  trabajador: string;
+}
+
 export const GoogleCalendarService = {
   getAuthUrl(userId: string): string {
     const oauth2Client = new google.auth.OAuth2(
@@ -88,7 +100,7 @@ export const GoogleCalendarService = {
     return google.calendar({ version: 'v3', auth: client });
   },
 
-  async pushEvent(userId: string, appointment: any, action: 'create' | 'update' | 'delete') {
+  async pushEvent(userId: string, appointment: CalendarAppointment, action: 'create' | 'update' | 'delete') {
     if (!env.googleClientId) return; // Si no está configurado, ignora.
 
     try {

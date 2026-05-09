@@ -22,21 +22,21 @@ export const UsersController = {
     const paramData = moduleIdParamSchema.parse(req.params);
     const bodyData = setModuleOverrideSchema.parse(req.body);
 
-    const overrides = await setModuleOverride(user.id, paramData.moduleId as any, bodyData.enabled);
+    const overrides = await setModuleOverride(user.id, paramData.moduleId, bodyData.enabled);
     res.json({ overrides });
   }),
 
   clearModuleOverride: asyncWrapper(async (req: Request, res: Response) => {
     const user = getAuthUser(req);
     const paramData = moduleIdParamSchema.parse(req.params);
-    const overrides = await clearModuleOverride(user.id, paramData.moduleId as any);
+    const overrides = await clearModuleOverride(user.id, paramData.moduleId);
     res.json({ overrides });
   }),
 
   updatePlan: asyncWrapper(async (req: Request, res: Response) => {
     const user = getAuthUser(req);
     const data = updatePlanSchema.parse(req.body);
-    const updatedUser = await setUserPlan(user.id, data.plan as any);
+    const updatedUser = await setUserPlan(user.id, data.plan);
     
     if (!updatedUser) throw new ApiError(404, 'Usuario no encontrado.');
 

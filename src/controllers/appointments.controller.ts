@@ -4,6 +4,7 @@ import {
   findAppointmentById,
   listAppointments,
   updateAppointment,
+  UpdateAppointmentInput,
 } from '../data/repositories/appointment.repository';
 import { AppointmentStatusDb } from '../data/utils';
 import {
@@ -135,7 +136,7 @@ export const AppointmentsController = {
       }
 
       // Sincronizar asincrónicamente con Google Calendar
-      GoogleCalendarService.pushEvent(user.id, apiAppointment as any, 'create').catch(console.error);
+      GoogleCalendarService.pushEvent(user.id, apiAppointment, 'create').catch(console.error);
 
       res.status(201).json({ appointment: apiAppointment });
     } catch (error) {
@@ -152,7 +153,7 @@ export const AppointmentsController = {
     const params = appointmentIdParamSchema.parse(req.params);
     const data = updateAppointmentSchema.parse(req.body);
 
-    const payload: any = {};
+    const payload: UpdateAppointmentInput = {};
     if (data.clienteNombre !== undefined) payload.customerName = data.clienteNombre;
     if (data.clienteTelefono !== undefined) payload.customerPhone = data.clienteTelefono;
     if (data.servicio !== undefined) payload.serviceName = data.servicio;
@@ -189,7 +190,7 @@ export const AppointmentsController = {
       SseManager.broadcast(user.id, 'appointments_updated', { action: 'update', appointment: apiAppointment });
       
       const googleAction = apiAppointment.estado === 'cancelada' ? 'delete' : 'update';
-      GoogleCalendarService.pushEvent(user.id, apiAppointment as any, googleAction).catch(console.error);
+      GoogleCalendarService.pushEvent(user.id, apiAppointment, googleAction).catch(console.error);
 
       res.json({ appointment: apiAppointment });
     } catch (error) {

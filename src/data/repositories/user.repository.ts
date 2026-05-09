@@ -16,6 +16,8 @@ import {
 } from '../utils';
 import { ensureTenantSchema } from '../schema';
 
+const tenantCache = new Map<string, string>();
+
 export interface CreateUserInput {
   email: string;
   password: string;
@@ -199,6 +201,8 @@ export function sanitizeUser(user: UserRecord): UserPublic {
 }
 
 export async function getTenantDbNameByUserId(userId: string): Promise<string | null> {
+  if (tenantCache.has(userId)) return tenantCache.get(userId)!;
+
   const db = getControlPool();
   const [rows] = await db.query<TenantRefRow[]>(
     `SELECT id, tenant_db_name FROM users WHERE id = ? LIMIT 1`,
@@ -213,6 +217,7 @@ export async function getTenantDbNameByUserId(userId: string): Promise<string | 
     await db.query(`UPDATE users SET tenant_db_name = ? WHERE id = ?`, [tenantDbName, row.id]);
   }
 
+  tenantCache.set(userId, tenantDbName);
   return tenantDbName;
 }
 
