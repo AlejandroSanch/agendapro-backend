@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import { confirmAppointmentPublic, confirmAppointmentPublicGet, getAppointmentPublicDetails } from '../controllers/public.controller';
+import {
+  confirmAppointmentPublic,
+  confirmAppointmentPublicGet,
+  getAppointmentPublicDetails,
+} from '../controllers/public.controller';
 
 const router = Router();
 

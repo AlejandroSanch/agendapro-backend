@@ -27,7 +27,7 @@ export async function down({ context }: { context: MigrationContext }): Promise<
     CHANGE COLUMN service_name title VARCHAR(255) NOT NULL;
   `);
 
-  // (Nota: los nombres de los clientes se pierden en la migración hacia abajo 
-  // ya que no hay una forma segura de concatenarlos de nuevo masivamente 
+  // (Nota: los nombres de los clientes se pierden en la migración hacia abajo
+  // ya que no hay una forma segura de concatenarlos de nuevo masivamente
   // si el ID del cliente cambió, pero se puede armar con un JOIN si se deseara).
 }

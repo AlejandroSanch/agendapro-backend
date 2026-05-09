@@ -14,13 +14,14 @@ healthRouter.get('/', (_req, res) => {
 healthRouter.get('/test-whatsapp', async (req, res) => {
   try {
     const { to } = req.query;
-    if (!to) return res.status(400).json({ error: 'Falta el numero "to" en la query (ej: ?to=521...)' });
-    
+    if (!to)
+      return res.status(400).json({ error: 'Falta el numero "to" en la query (ej: ?to=521...)' });
+
     const result = await WhatsAppService.sendAppointmentReminder(
       to as string,
       'Cliente de Prueba',
       'Hoy',
-      '17:00'
+      '17:00',
     );
     res.json({ success: true, message: 'WhatsApp enviado!', result });
   } catch (error: any) {

@@ -6,12 +6,7 @@ import { PlanId } from '../types';
 
 export const SALT_ROUNDS = 10;
 
-export type AppointmentStatusDb =
-  | 'scheduled'
-  | 'confirmed'
-  | 'completed'
-  | 'cancelled'
-  | 'no_show';
+export type AppointmentStatusDb = 'scheduled' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
 
 export function normalizePlan(value: unknown): PlanId {
   if (value === 'starter' || value === 'pro' || value === 'enterprise') return value as PlanId;
@@ -32,7 +27,9 @@ export function normalizeAppointmentStatus(value: unknown): AppointmentStatusDb 
 }
 
 export function normalizeEmail(email: string): string {
-  return String(email || '').trim().toLowerCase();
+  return String(email || '')
+    .trim()
+    .toLowerCase();
 }
 
 export function normalizeServiceCategory(value: unknown): string {
@@ -42,7 +39,9 @@ export function normalizeServiceCategory(value: unknown): string {
 }
 
 export function tenantDbNameFromUserId(userId: string): string {
-  const safeId = String(userId || '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+  const safeId = String(userId || '')
+    .replace(/[^a-zA-Z0-9_]/g, '_')
+    .toLowerCase();
   return `${env.mysqlTenantDbPrefix}${safeId}`;
 }
 
@@ -95,8 +94,8 @@ export function isPrimaryKeyDuplicateError(error: unknown): boolean {
 
   const detail = String(
     (error as { sqlMessage?: string; message?: string })?.sqlMessage ??
-    (error as { message?: string })?.message ??
-    ''
+      (error as { message?: string })?.message ??
+      '',
   );
 
   return detail.toLowerCase().includes("for key 'primary'");
@@ -107,8 +106,8 @@ export function isUsersEmailDuplicateError(error: unknown): boolean {
 
   const detail = String(
     (error as { sqlMessage?: string; message?: string })?.sqlMessage ??
-    (error as { message?: string })?.message ??
-    ''
+      (error as { message?: string })?.message ??
+      '',
   ).toLowerCase();
 
   return detail.includes("for key 'email'") || detail.includes("for key 'users.email'");
@@ -126,9 +125,11 @@ export async function nextSequentialId(
   executor: Pool | PoolConnection,
   tableRef: string,
   prefix: string,
-  minDigits = 3
+  minDigits = 3,
 ): Promise<string> {
-  const normalizedPrefix = String(prefix || '').trim().toLowerCase();
+  const normalizedPrefix = String(prefix || '')
+    .trim()
+    .toLowerCase();
   const startPosition = normalizedPrefix.length + 1;
   const regex = `^${escapeRegexForMySql(normalizedPrefix)}[0-9]+$`;
 
@@ -138,7 +139,7 @@ export async function nextSequentialId(
       FROM ${tableRef}
       WHERE id REGEXP ?
     `,
-    [startPosition, regex]
+    [startPosition, regex],
   );
 
   const current = Number(rows[0]?.max_value ?? 0);

@@ -306,7 +306,6 @@ export async function up({ context }: { context: MigrationContext }): Promise<vo
       CONSTRAINT fk_notifications_appointment FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE SET NULL ON UPDATE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
-
 }
 
 export async function down({ context }: { context: MigrationContext }): Promise<void> {

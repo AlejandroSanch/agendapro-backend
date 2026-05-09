@@ -23,32 +23,38 @@ describe('InventoryRepository', () => {
       // 1. Count query mock
       mockQuery.mockResolvedValueOnce([[{ total: 1 }]]);
       // 2. Data query mock
-      mockQuery.mockResolvedValueOnce([[
-        {
-          id: 1,
-          product_id: 10,
-          product_name: 'Shampoo',
-          type: 'in',
-          quantity: 5,
-          stock_before: 10,
-          stock_after: 15,
-          notes: 'Compra proveedor',
-          staff_id: null,
-          created_at: '2026-05-08 12:00:00'
-        }
-      ]]);
+      mockQuery.mockResolvedValueOnce([
+        [
+          {
+            id: 1,
+            product_id: 10,
+            product_name: 'Shampoo',
+            type: 'in',
+            quantity: 5,
+            stock_before: 10,
+            stock_after: 15,
+            notes: 'Compra proveedor',
+            staff_id: null,
+            created_at: '2026-05-08 12:00:00',
+          },
+        ],
+      ]);
 
       const { data, total } = await listInventoryLogs(userId);
 
       expect(data).toHaveLength(1);
       expect(total).toBe(1);
-      expect(data[0]!).toEqual(expect.objectContaining({
-        id: '1',
-        productName: 'Shampoo',
-        quantity: 5,
-        stockAfter: 15
-      }));
-      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('FROM `tenant_test`.inventory_logs'));
+      expect(data[0]!).toEqual(
+        expect.objectContaining({
+          id: '1',
+          productName: 'Shampoo',
+          quantity: 5,
+          stockAfter: 15,
+        }),
+      );
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('FROM `tenant_test`.inventory_logs'),
+      );
     });
   });
 
@@ -67,22 +73,22 @@ describe('InventoryRepository', () => {
         productId,
         type: 'in',
         quantity: 5,
-        notes: 'Nueva carga'
+        notes: 'Nueva carga',
       });
 
       expect(result?.stockAfter).toBe(15);
       expect(result?.quantity).toBe(5);
-      
+
       // Verificar UPDATE de stock
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE `tenant_test`.products SET stock_quantity = ?'),
-        [15, productId]
+        [15, productId],
       );
-      
+
       // Verificar INSERT de log
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO `tenant_test`.inventory_logs'),
-        expect.arrayContaining([productId, 'in', 5, 10, 15])
+        expect.arrayContaining([productId, 'in', 5, 10, 15]),
       );
     });
 
@@ -94,14 +100,14 @@ describe('InventoryRepository', () => {
       const result = await adjustStock(userId, {
         productId,
         type: 'out',
-        quantity: 3
+        quantity: 3,
       });
 
       expect(result?.stockAfter).toBe(17);
       expect(result?.quantity).toBe(3);
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE `tenant_test`.products SET stock_quantity = ?'),
-        [17, productId]
+        [17, productId],
       );
     });
 
@@ -114,18 +120,18 @@ describe('InventoryRepository', () => {
       const result = await adjustStock(userId, {
         productId,
         type: 'adjustment',
-        quantity: 25 // En ajuste, quantity es el nuevo total
+        quantity: 25, // En ajuste, quantity es el nuevo total
       });
 
       expect(result?.stockAfter).toBe(25);
       expect(result?.quantity).toBe(15); // 25 - 10
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE `tenant_test`.products SET stock_quantity = ?'),
-        [25, productId]
+        [25, productId],
       );
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO `tenant_test`.inventory_logs'),
-        expect.arrayContaining([productId, 'adjustment', 15, 10, 25])
+        expect.arrayContaining([productId, 'adjustment', 15, 10, 25]),
       );
     });
 
@@ -135,11 +141,14 @@ describe('InventoryRepository', () => {
       const result = await adjustStock(userId, {
         productId: '999',
         type: 'in',
-        quantity: 1
+        quantity: 1,
       });
 
       expect(result).toBeNull();
-      expect(mockQuery).not.toHaveBeenCalledWith(expect.stringContaining('UPDATE'), expect.anything());
+      expect(mockQuery).not.toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE'),
+        expect.anything(),
+      );
     });
   });
 });

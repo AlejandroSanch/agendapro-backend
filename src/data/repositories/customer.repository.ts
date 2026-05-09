@@ -1,8 +1,6 @@
 import { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { getControlPool } from '../db';
-import {
-  q,
-} from '../utils';
+import { q } from '../utils';
 import { getTenantDbNameByUserId } from './user.repository';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -85,9 +83,9 @@ const STATUS_MAP: Record<string, CustomerCitaRecord['estado']> = {
 
 function toCustomerRecord(row: CustomerRow, citas: CustomerCitaRecord[]): CustomerRecord {
   const nombre = [row.first_name, row.last_name].filter(Boolean).join(' ');
-  const sexo = (['masculino', 'femenino', 'otro'].includes(row.sex ?? '')
-    ? (row.sex as CustomerSex)
-    : '') as CustomerSex;
+  const sexo = (
+    ['masculino', 'femenino', 'otro'].includes(row.sex ?? '') ? (row.sex as CustomerSex) : ''
+  ) as CustomerSex;
 
   return {
     id: String(row.id),
@@ -122,7 +120,7 @@ function toCustomerCitaRecord(row: AppointmentRow): CustomerCitaRecord {
 
 async function fetchCitasForCustomer(
   tenantDbName: string,
-  customerId: string
+  customerId: string,
 ): Promise<CustomerCitaRecord[]> {
   const db = getControlPool();
   const [rows] = await db.query<AppointmentRow[]>(
@@ -139,7 +137,7 @@ async function fetchCitasForCustomer(
       WHERE a.customer_id = ?
       ORDER BY a.start_at DESC
     `,
-    [customerId]
+    [customerId],
   );
   return rows.map(toCustomerCitaRecord);
 }
@@ -158,14 +156,14 @@ async function ensureCustomersSchema(tenantDbName: string): Promise<void> {
      WHERE TABLE_SCHEMA = ?
        AND TABLE_NAME   = 'customers'
        AND COLUMN_NAME  = 'sex'`,
-    [tenantDbName]
+    [tenantDbName],
   );
 
   if ((rows as RowDataPacket[]).length === 0) {
     await db.query(
       `ALTER TABLE ${q(tenantDbName)}.customers
          ADD COLUMN sex ENUM('masculino','femenino','otro') NULL DEFAULT NULL
-           AFTER birth_date`
+           AFTER birth_date`,
     );
   }
 }
@@ -174,7 +172,7 @@ async function ensureCustomersSchema(tenantDbName: string): Promise<void> {
 
 export async function listCustomers(
   userId: string,
-  pagination?: { page?: number; limit?: number }
+  pagination?: { page?: number; limit?: number },
 ): Promise<{ data: CustomerRecord[]; total: number }> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return { data: [], total: 0 };
@@ -185,7 +183,7 @@ export async function listCustomers(
 
   // 1. Get total count
   const [countRows] = await db.query<RowDataPacket[]>(
-    `SELECT COUNT(*) as total FROM ${q(tenantDbName)}.customers`
+    `SELECT COUNT(*) as total FROM ${q(tenantDbName)}.customers`,
   );
   const total = Number(countRows[0]?.total ?? 0);
 
@@ -202,7 +200,7 @@ export async function listCustomers(
       ORDER BY first_name ASC, last_name ASC
       LIMIT ? OFFSET ?
     `,
-    [limit, offset]
+    [limit, offset],
   );
 
   const records: CustomerRecord[] = [];
@@ -213,13 +211,13 @@ export async function listCustomers(
 
   return {
     data: records,
-    total
+    total,
   };
 }
 
 export async function getCustomerById(
   userId: string,
-  customerId: string
+  customerId: string,
 ): Promise<CustomerRecord | null> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return null;
@@ -232,7 +230,7 @@ export async function getCustomerById(
       FROM ${q(tenantDbName)}.customers
       WHERE id = ? LIMIT 1
     `,
-    [customerId]
+    [customerId],
   );
 
   const row = rows[0];
@@ -243,7 +241,7 @@ export async function getCustomerById(
 
 export async function createCustomer(
   userId: string,
-  input: UpsertCustomerInput
+  input: UpsertCustomerInput,
 ): Promise<CustomerRecord | null> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return null;
@@ -266,7 +264,7 @@ export async function createCustomer(
           (first_name, last_name, phone, email, birth_date, sex, notes, is_active, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
       `,
-      [firstName, lastName, phone, email, birthDate, sex, notes]
+      [firstName, lastName, phone, email, birthDate, sex, notes],
     );
     const newId = result.insertId.toString();
     return getCustomerById(userId, newId);
@@ -278,7 +276,7 @@ export async function createCustomer(
 export async function updateCustomer(
   userId: string,
   customerId: string,
-  input: UpdateCustomerInput
+  input: UpdateCustomerInput,
 ): Promise<CustomerRecord | null> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return null;
@@ -292,11 +290,26 @@ export async function updateCustomer(
     setParts.push('first_name = ?', 'last_name = ?');
     params.push(firstName, lastName);
   }
-  if (input.telefono !== undefined) { setParts.push('phone = ?'); params.push(input.telefono.trim() || null); }
-  if (input.email !== undefined) { setParts.push('email = ?'); params.push(input.email.trim() || null); }
-  if (input.fechaNacimiento !== undefined) { setParts.push('birth_date = ?'); params.push(input.fechaNacimiento.trim() || null); }
-  if (input.sexo !== undefined) { setParts.push('sex = ?'); params.push(input.sexo || null); }
-  if (input.notas !== undefined) { setParts.push('notes = ?'); params.push(input.notas.trim() || null); }
+  if (input.telefono !== undefined) {
+    setParts.push('phone = ?');
+    params.push(input.telefono.trim() || null);
+  }
+  if (input.email !== undefined) {
+    setParts.push('email = ?');
+    params.push(input.email.trim() || null);
+  }
+  if (input.fechaNacimiento !== undefined) {
+    setParts.push('birth_date = ?');
+    params.push(input.fechaNacimiento.trim() || null);
+  }
+  if (input.sexo !== undefined) {
+    setParts.push('sex = ?');
+    params.push(input.sexo || null);
+  }
+  if (input.notas !== undefined) {
+    setParts.push('notes = ?');
+    params.push(input.notas.trim() || null);
+  }
 
   if (setParts.length === 0) return getCustomerById(userId, customerId);
 
@@ -305,7 +318,7 @@ export async function updateCustomer(
 
   const [result] = await db.query<ResultSetHeader>(
     `UPDATE ${q(tenantDbName)}.customers SET ${setParts.join(', ')} WHERE id = ?`,
-    params
+    params,
   );
 
   if (!result.affectedRows) return null;
@@ -314,7 +327,7 @@ export async function updateCustomer(
 
 export async function toggleCustomerActive(
   userId: string,
-  customerId: string
+  customerId: string,
 ): Promise<CustomerRecord | null> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return null;
@@ -322,7 +335,7 @@ export async function toggleCustomerActive(
   const db = getControlPool();
   const [result] = await db.query<ResultSetHeader>(
     `UPDATE ${q(tenantDbName)}.customers SET is_active = 1 - is_active, updated_at = NOW() WHERE id = ?`,
-    [customerId]
+    [customerId],
   );
 
   if (!result.affectedRows) return null;
@@ -331,7 +344,7 @@ export async function toggleCustomerActive(
 
 export async function deleteCustomer(
   userId: string,
-  customerId: string
+  customerId: string,
 ): Promise<{ deleted: boolean; deactivated: boolean }> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return { deleted: false, deactivated: false };
@@ -341,7 +354,7 @@ export async function deleteCustomer(
   // Verificar si tiene citas asociadas
   const [citaRows] = await db.query<RowDataPacket[]>(
     `SELECT COUNT(*) AS total FROM ${q(tenantDbName)}.appointments WHERE customer_id = ?`,
-    [customerId]
+    [customerId],
   );
   const hasCitas = Number(citaRows[0]?.total ?? 0) > 0;
 
@@ -349,14 +362,14 @@ export async function deleteCustomer(
     // Si tiene citas, marcar inactivo en lugar de eliminar
     const [result] = await db.query<ResultSetHeader>(
       `UPDATE ${q(tenantDbName)}.customers SET is_active = 0, updated_at = NOW() WHERE id = ?`,
-      [customerId]
+      [customerId],
     );
     return { deleted: false, deactivated: result.affectedRows > 0 };
   }
 
   const [result] = await db.query<ResultSetHeader>(
     `DELETE FROM ${q(tenantDbName)}.customers WHERE id = ?`,
-    [customerId]
+    [customerId],
   );
   return { deleted: result.affectedRows > 0, deactivated: false };
 }

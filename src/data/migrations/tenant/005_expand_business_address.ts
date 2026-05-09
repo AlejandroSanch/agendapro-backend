@@ -19,7 +19,7 @@ export async function up({ context }: { context: MigrationContext }): Promise<vo
   for (const col of cols) {
     const [existing] = await db.query<any[]>(
       `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'business_settings' AND COLUMN_NAME = ?`,
-      [col.name]
+      [col.name],
     );
     if (existing.length === 0) {
       await db.query(`ALTER TABLE business_settings ADD COLUMN ${col.name} ${col.def}`);

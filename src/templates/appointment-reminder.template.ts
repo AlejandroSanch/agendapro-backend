@@ -19,8 +19,14 @@ export interface AppointmentReminderParams {
 
 export function buildAppointmentReminderHtml(params: AppointmentReminderParams): string {
   const {
-    customerName, confirmLink, businessName, serviceName,
-    specialistName, dateFormatted, timeFormatted, businessAddress
+    customerName,
+    confirmLink,
+    businessName,
+    serviceName,
+    specialistName,
+    dateFormatted,
+    timeFormatted,
+    businessAddress,
   } = params;
   const year = new Date().getFullYear();
 

@@ -10,7 +10,9 @@ import { ApiError } from '../utils/ApiError';
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function toMinutes(timeStr: string): number {
-  const [h, m] = String(timeStr || '').split(':').map(Number);
+  const [h, m] = String(timeStr || '')
+    .split(':')
+    .map(Number);
   return (h || 0) * 60 + (m || 0);
 }
 
@@ -24,7 +26,7 @@ const JS_TO_DB_DAY: Record<number, number> = { 0: 6, 1: 0, 2: 1, 3: 2, 4: 3, 5: 
  */
 function validateNotInPast(date: string, time: string): void {
   const startAt = new Date(`${date}T${time}:00`);
-  if (startAt.getTime() < (Date.now() - 60_000)) {
+  if (startAt.getTime() < Date.now() - 60_000) {
     throw new ApiError(400, 'No se puede crear una cita en el pasado.');
   }
 }
@@ -45,7 +47,7 @@ async function validateNotHoliday(userId: string, date: string): Promise<void> {
 function validateBusinessHours(
   schedule: BusinessSchedule | undefined,
   time: string,
-  durationMin: number
+  durationMin: number,
 ): void {
   if (!schedule || !schedule.open) {
     throw new ApiError(400, 'El negocio está cerrado en el día seleccionado.');
@@ -57,7 +59,10 @@ function validateBusinessHours(
   const closeMin = toMinutes(schedule.to);
 
   if (startMin < openMin || endMin > closeMin) {
-    throw new ApiError(400, `La duración de la cita excede el horario comercial (${schedule.from} - ${schedule.to}).`);
+    throw new ApiError(
+      400,
+      `La duración de la cita excede el horario comercial (${schedule.from} - ${schedule.to}).`,
+    );
   }
 }
 
@@ -67,12 +72,12 @@ function validateBusinessHours(
 function resolveBreakTime(
   trabajadorName: string | undefined,
   staffList: StaffRecord[],
-  settings: { breakEnabled: boolean; breakStart: string | null; breakEnd: string | null }
+  settings: { breakEnabled: boolean; breakStart: string | null; breakEnd: string | null },
 ): { breakStart: string | null; breakEnd: string | null } {
   if (trabajadorName) {
     const normalizedName = trabajadorName.toLowerCase().trim().replace(/\s+/g, ' ');
     const staffMember = staffList.find(
-      s => s.nombre.toLowerCase().trim().replace(/\s+/g, ' ') === normalizedName
+      (s) => s.nombre.toLowerCase().trim().replace(/\s+/g, ' ') === normalizedName,
     );
     if (staffMember?.descansoPropio) {
       return { breakStart: staffMember.descansoDesde, breakEnd: staffMember.descansoHasta };
@@ -93,7 +98,7 @@ function validateBreakTimeConflict(
   time: string,
   durationMin: number,
   breakStart: string | null,
-  breakEnd: string | null
+  breakEnd: string | null,
 ): void {
   if (!breakStart || !breakEnd) return;
 
@@ -103,7 +108,10 @@ function validateBreakTimeConflict(
   const breakEndMin = toMinutes(breakEnd);
 
   if (startMin < breakEndMin && endMin > breakStartMin) {
-    throw new ApiError(400, `La cita coincide con el horario de descanso de ${breakStart} a ${breakEnd}.`);
+    throw new ApiError(
+      400,
+      `La cita coincide con el horario de descanso de ${breakStart} a ${breakEnd}.`,
+    );
   }
 }
 
@@ -113,12 +121,15 @@ export const AppointmentService = {
   /**
    * Ejecuta todas las validaciones de negocio para crear una cita.
    */
-  async validateCreate(userId: string, data: {
-    fecha: string;
-    hora: string;
-    duracionMin: number;
-    trabajador?: string;
-  }): Promise<void> {
+  async validateCreate(
+    userId: string,
+    data: {
+      fecha: string;
+      hora: string;
+      duracionMin: number;
+      trabajador?: string;
+    },
+  ): Promise<void> {
     // 1. No permitir citas en el pasado
     validateNotInPast(data.fecha, data.hora);
 
@@ -130,7 +141,7 @@ export const AppointmentService = {
     if (settings) {
       const dateObj = new Date(`${data.fecha}T00:00:00`);
       const dbDay = JS_TO_DB_DAY[dateObj.getDay()];
-      const schedule = settings.schedules.find(s => s.day === dbDay);
+      const schedule = settings.schedules.find((s) => s.day === dbDay);
 
       validateBusinessHours(schedule, data.hora, data.duracionMin);
 
@@ -144,12 +155,15 @@ export const AppointmentService = {
   /**
    * Ejecuta las validaciones de negocio para actualizar una cita (break time).
    */
-  async validateUpdate(userId: string, data: {
-    fecha: string;
-    hora: string;
-    duracionMin: number;
-    trabajador?: string;
-  }): Promise<void> {
+  async validateUpdate(
+    userId: string,
+    data: {
+      fecha: string;
+      hora: string;
+      duracionMin: number;
+      trabajador?: string;
+    },
+  ): Promise<void> {
     const settings = await getBusinessSettings(userId);
     if (!settings) return;
 

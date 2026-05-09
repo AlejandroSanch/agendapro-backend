@@ -1,6 +1,15 @@
 import { Request, Response } from 'express';
-import { clearModuleOverride, getModuleOverrides, setModuleOverride, setUserPlan } from '../data/repositories/user.repository';
-import { moduleIdParamSchema, setModuleOverrideSchema, updatePlanSchema } from '../validators/users.validators';
+import {
+  clearModuleOverride,
+  getModuleOverrides,
+  setModuleOverride,
+  setUserPlan,
+} from '../data/repositories/user.repository';
+import {
+  moduleIdParamSchema,
+  setModuleOverrideSchema,
+  updatePlanSchema,
+} from '../validators/users.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
 import { getAuthUser } from '../utils/request';
@@ -37,9 +46,9 @@ export const UsersController = {
     const user = getAuthUser(req);
     const data = updatePlanSchema.parse(req.body);
     const updatedUser = await setUserPlan(user.id, data.plan);
-    
+
     if (!updatedUser) throw new ApiError(404, 'Usuario no encontrado.');
 
     res.json({ user: updatedUser });
-  })
+  }),
 };

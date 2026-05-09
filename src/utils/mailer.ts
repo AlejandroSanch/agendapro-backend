@@ -35,7 +35,7 @@ export async function sendMail(
   to: string,
   subject: string,
   text: string,
-  html?: string
+  html?: string,
 ): Promise<void> {
   try {
     const t = await getTransporter();
@@ -46,7 +46,7 @@ export async function sendMail(
       text,
       html,
     });
-    
+
     console.log(`📩 Email sent successfully to ${to} (messageId: ${info.messageId})`);
   } catch (error) {
     console.error(`❌ Error sending email to ${to}:`, error);

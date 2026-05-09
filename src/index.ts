@@ -1,6 +1,10 @@
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
+import 'dotenv/config';
 import { env } from './config/env';
 import { initializeStore } from './data/schema';
 import { appointmentsRouter } from './routes/appointments.routes';
@@ -42,7 +46,7 @@ app.use(
       callback(new Error(`CORS blocked for origin: ${origin}`));
     },
     credentials: false,
-  })
+  }),
 );
 app.use(express.json({ limit: '1mb' }));
 
@@ -76,7 +80,7 @@ app.use(globalErrorHandler);
 async function bootstrap(): Promise<void> {
   try {
     await initializeStore();
-    
+
     // Start cron jobs
     cron.schedule('0 * * * *', runRemindersJob); // Runs at minute 0 past every hour
 
@@ -94,7 +98,9 @@ async function bootstrap(): Promise<void> {
           const pool = getControlPool();
           await pool.end();
           logger.info('MySQL pool closed.');
-        } catch { /* pool may not be initialized */ }
+        } catch {
+          /* pool may not be initialized */
+        }
         process.exit(0);
       });
 

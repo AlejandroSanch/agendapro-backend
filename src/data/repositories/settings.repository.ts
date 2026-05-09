@@ -50,14 +50,16 @@ export async function getOnboardingStatus(userId: string): Promise<boolean> {
   const db = getControlPool();
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT onboarding_completed FROM users WHERE id = ? LIMIT 1`,
-    [userId]
+    [userId],
   );
   return rows[0]?.onboarding_completed === 1;
 }
 
 export async function setOnboardingCompleted(userId: string): Promise<void> {
   const db = getControlPool();
-  await db.query(`UPDATE users SET onboarding_completed = 1, updated_at = NOW() WHERE id = ?`, [userId]);
+  await db.query(`UPDATE users SET onboarding_completed = 1, updated_at = NOW() WHERE id = ?`, [
+    userId,
+  ]);
 }
 
 export async function getBusinessSettings(userId: string): Promise<BusinessSettings | null> {
@@ -66,7 +68,7 @@ export async function getBusinessSettings(userId: string): Promise<BusinessSetti
 
   const db = getControlPool();
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT * FROM ${q(tenantDbName)}.business_settings LIMIT 1`
+    `SELECT * FROM ${q(tenantDbName)}.business_settings LIMIT 1`,
   );
 
   const row = rows[0];
@@ -74,14 +76,14 @@ export async function getBusinessSettings(userId: string): Promise<BusinessSetti
 
   // Cargar schedules desde la nueva tabla
   const [hoursRows] = await db.query<RowDataPacket[]>(
-    `SELECT day_of_week, open_time, close_time, is_closed FROM ${q(tenantDbName)}.business_hours ORDER BY day_of_week ASC`
+    `SELECT day_of_week, open_time, close_time, is_closed FROM ${q(tenantDbName)}.business_hours ORDER BY day_of_week ASC`,
   );
 
-  const schedules: BusinessSchedule[] = hoursRows.map(h => ({
+  const schedules: BusinessSchedule[] = hoursRows.map((h) => ({
     day: h.day_of_week,
     open: h.is_closed === 0,
     from: h.open_time ? h.open_time.substring(0, 5) : '09:00',
-    to: h.close_time ? h.close_time.substring(0, 5) : '18:00'
+    to: h.close_time ? h.close_time.substring(0, 5) : '18:00',
   }));
 
   return {
@@ -105,7 +107,7 @@ export async function getBusinessSettings(userId: string): Promise<BusinessSetti
 
 export async function upsertBusinessSettings(
   userId: string,
-  input: Partial<BusinessSettings>
+  input: Partial<BusinessSettings>,
 ): Promise<BusinessSettings | null> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return null;
@@ -174,12 +176,21 @@ export async function upsertBusinessSettings(
           updated_at = NOW()
       `,
       [
-        next.businessType, next.phone, next.address, next.street, next.extNumber, next.intNumber,
-        next.neighborhood, next.city, next.state, next.zipCode, next.logoUrl,
+        next.businessType,
+        next.phone,
+        next.address,
+        next.street,
+        next.extNumber,
+        next.intNumber,
+        next.neighborhood,
+        next.city,
+        next.state,
+        next.zipCode,
+        next.logoUrl,
         next.breakEnabled ? 1 : 0,
         next.breakStart ? next.breakStart + ':00' : null,
         next.breakEnd ? next.breakEnd + ':00' : null,
-      ]
+      ],
     );
 
     // Save Schedules to new table
@@ -188,7 +199,7 @@ export async function upsertBusinessSettings(
       for (const sch of next.schedules) {
         await connection.query(
           `INSERT INTO ${q(tenantDbName)}.business_hours (day_of_week, open_time, close_time, is_closed) VALUES (?, ?, ?, ?)`,
-          [sch.day, sch.from || '00:00', sch.to || '00:00', sch.open ? 0 : 1]
+          [sch.day, sch.from || '00:00', sch.to || '00:00', sch.open ? 0 : 1],
         );
       }
     }
@@ -214,7 +225,7 @@ export async function listStaff(userId: string): Promise<StaffRecord[]> {
       FROM ${q(tenantDbName)}.staff s
       LEFT JOIN ${q(tenantDbName)}.roles r ON s.role_id = r.id
       ORDER BY s.first_name ASC
-    `
+    `,
   );
 
   return rows.map(rowToStaffRecord);
@@ -222,22 +233,30 @@ export async function listStaff(userId: string): Promise<StaffRecord[]> {
 
 export async function createStaffMember(
   userId: string,
-  input: CreateStaffInput
+  input: CreateStaffInput,
 ): Promise<StaffRecord | null> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return null;
 
   const db = getControlPool();
-  let roleId = '2'; // Default to staff role ID
-  const [roleRows] = await db.query<RowDataPacket[]>(`SELECT id FROM ${q(tenantDbName)}.roles WHERE name = ? LIMIT 1`, [input.role || 'staff']);
+  let roleId: string;
+  const [roleRows] = await db.query<RowDataPacket[]>(
+    `SELECT id FROM ${q(tenantDbName)}.roles WHERE name = ? LIMIT 1`,
+    [input.role || 'staff'],
+  );
   if (!roleRows[0]) {
-    const [roleResult] = await db.query<ResultSetHeader>(`INSERT INTO ${q(tenantDbName)}.roles (name) VALUES (?)`, [input.role || 'staff']);
+    const [roleResult] = await db.query<ResultSetHeader>(
+      `INSERT INTO ${q(tenantDbName)}.roles (name) VALUES (?)`,
+      [input.role || 'staff'],
+    );
     roleId = roleResult.insertId.toString();
   } else {
     roleId = String(roleRows[0].id);
   }
 
-  const nameParts = String(input.fullName || '').trim().split(' ');
+  const nameParts = String(input.fullName || '')
+    .trim()
+    .split(' ');
   const firstName = nameParts[0] || '';
   const lastName = nameParts.slice(1).join(' ') || '';
 
@@ -246,15 +265,9 @@ export async function createStaffMember(
       INSERT INTO ${q(tenantDbName)}.staff (role_id, first_name, last_name, email, phone, is_active, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, 1, NOW(), NOW())
     `,
-    [
-      roleId,
-      firstName,
-      lastName,
-      input.email || null,
-      input.phone || null,
-    ]
+    [roleId, firstName, lastName, input.email || null, input.phone || null],
   );
-  
+
   const staffId = staffResult.insertId.toString();
 
   const [rows] = await db.query<RowDataPacket[]>(
@@ -264,14 +277,14 @@ export async function createStaffMember(
       LEFT JOIN ${q(tenantDbName)}.roles r ON s.role_id = r.id
       WHERE s.id = ? LIMIT 1
     `,
-    [staffId]
+    [staffId],
   );
 
   return rows[0] ? rowToStaffRecord(rows[0] as RowDataPacket) : null;
 }
 
 function rowToStaffRecord(row: RowDataPacket): StaffRecord {
-  let specialties: string[] = [];
+  let specialties: string[];
   try {
     specialties = JSON.parse(row.specialties || '[]');
   } catch {
@@ -295,7 +308,7 @@ export async function isHolidayClosure(userId: string, date: string): Promise<bo
   const db = getControlPool();
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT id FROM ${q(tenantDbName)}.holidays_closures WHERE closure_date = ? LIMIT 1`,
-    [date]
+    [date],
   );
   return rows.length > 0;
 }
@@ -311,7 +324,7 @@ export async function seedHolidayClosures(userId: string, dates: string[]): Prom
   for (const date of dates) {
     await db.query(
       `INSERT IGNORE INTO ${q(tenantDbName)}.holidays_closures (closure_date, reason) VALUES (?, ?)`,
-      [date, 'Cierres de prueba - Mantenimiento']
+      [date, 'Cierres de prueba - Mantenimiento'],
     );
   }
 }

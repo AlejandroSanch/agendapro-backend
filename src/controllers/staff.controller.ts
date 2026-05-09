@@ -1,4 +1,6 @@
-import { Request, Response } from 'express';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
 import {
   createStaff,
   deleteStaff,
@@ -6,7 +8,11 @@ import {
   toggleStaffActive,
   updateStaff,
 } from '../data/repositories/staff.repository';
-import { createStaffSchema, staffIdParamSchema, updateStaffSchema } from '../validators/staff.validators';
+import {
+  createStaffSchema,
+  staffIdParamSchema,
+  updateStaffSchema,
+} from '../validators/staff.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
 import { getAuthUser } from '../utils/request';
@@ -54,7 +60,8 @@ export const StaffController = {
       if (!created) throw new ApiError(404, 'Usuario no encontrado.');
       res.status(201).json({ staffMember: created });
     } catch (error) {
-      if (isDuplicateEmailError(error)) throw new ApiError(409, 'Ya existe un empleado con ese email.');
+      if (isDuplicateEmailError(error))
+        throw new ApiError(409, 'Ya existe un empleado con ese email.');
       throw error;
     }
   }),
@@ -70,7 +77,8 @@ export const StaffController = {
       if (!updated) throw new ApiError(404, 'Empleado no encontrado.');
       res.json({ staffMember: updated });
     } catch (error) {
-      if (isDuplicateEmailError(error)) throw new ApiError(409, 'Ya existe un empleado con ese email.');
+      if (isDuplicateEmailError(error))
+        throw new ApiError(409, 'Ya existe un empleado con ese email.');
       throw error;
     }
   }),
@@ -100,7 +108,8 @@ export const StaffController = {
       if (!deleted) throw new ApiError(404, 'Empleado no encontrado.');
       res.json({ ok: true });
     } catch (error) {
-      if (isStaffInUseError(error)) throw new ApiError(409, 'No se puede eliminar: el empleado tiene citas asociadas.');
+      if (isStaffInUseError(error))
+        throw new ApiError(409, 'No se puede eliminar: el empleado tiene citas asociadas.');
       throw error;
     }
   }),

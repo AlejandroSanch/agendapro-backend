@@ -32,7 +32,10 @@ export async function createSale(userId: string, input: CheckoutInput): Promise<
   try {
     await connection.beginTransaction();
 
-    const subtotalCents = input.items.reduce((sum, item) => sum + (item.unitPriceCents * item.quantity), 0);
+    const subtotalCents = input.items.reduce(
+      (sum, item) => sum + item.unitPriceCents * item.quantity,
+      0,
+    );
     const taxCents = 0; // Por ahora 0, escalable luego
     const totalCents = subtotalCents + taxCents;
 
@@ -40,7 +43,7 @@ export async function createSale(userId: string, input: CheckoutInput): Promise<
     const [saleResult] = await connection.query<ResultSetHeader>(
       `INSERT INTO ${q(tenantDbName)}.sales (appointment_id, customer_id, subtotal_cents, tax_cents, total_cents, created_at)
        VALUES (?, ?, ?, ?, ?, NOW())`,
-      [input.appointmentId ?? null, input.customerId, subtotalCents, taxCents, totalCents]
+      [input.appointmentId ?? null, input.customerId, subtotalCents, taxCents, totalCents],
     );
     const saleId = saleResult.insertId.toString();
 
@@ -54,22 +57,22 @@ export async function createSale(userId: string, input: CheckoutInput): Promise<
           item.type === 'service' ? item.id : null,
           item.type === 'product' ? item.id : null,
           item.quantity,
-          item.unitPriceCents
-        ]
+          item.unitPriceCents,
+        ],
       );
 
       if (item.type === 'product') {
         // Descontar stock
         await connection.query(
           `UPDATE ${q(tenantDbName)}.products SET stock_quantity = stock_quantity - ? WHERE id = ?`,
-          [item.quantity, item.id]
+          [item.quantity, item.id],
         );
 
         // Registrar log de inventario
         await connection.query(
           `INSERT INTO ${q(tenantDbName)}.inventory_logs (product_id, type, quantity, notes, created_at)
            VALUES (?, 'out', ?, ?, NOW())`,
-          [item.id, item.quantity, `Venta ${saleId}`]
+          [item.id, item.quantity, `Venta ${saleId}`],
         );
       }
     }
@@ -79,7 +82,7 @@ export async function createSale(userId: string, input: CheckoutInput): Promise<
       await connection.query(
         `INSERT INTO ${q(tenantDbName)}.payments (sale_id, amount_cents, method, paid_at)
          VALUES (?, ?, ?, NOW())`,
-        [saleId, p.amountCents, p.method]
+        [saleId, p.amountCents, p.method],
       );
     }
 
@@ -87,7 +90,7 @@ export async function createSale(userId: string, input: CheckoutInput): Promise<
     if (input.appointmentId) {
       await connection.query(
         `UPDATE ${q(tenantDbName)}.appointments SET status = 'completed' WHERE id = ?`,
-        [input.appointmentId]
+        [input.appointmentId],
       );
     }
 

@@ -25,13 +25,13 @@ export const CustomersController = {
       page: query.page,
       limit: query.limit,
     });
-    res.json({ 
+    res.json({
       customers: data,
       pagination: {
         page: query.page,
         limit: query.limit,
-        total
-      }
+        total,
+      },
     });
   }),
 

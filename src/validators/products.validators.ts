@@ -20,4 +20,6 @@ export const createProductSchema = z.object({
 
 export const updateProductSchema = createProductSchema.partial();
 
-export const createProductBulkSchema = z.array(createProductSchema).min(1, 'La lista de productos no puede estar vacía');
+export const createProductBulkSchema = z
+  .array(createProductSchema)
+  .min(1, 'La lista de productos no puede estar vacía');

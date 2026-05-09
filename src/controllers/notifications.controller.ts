@@ -4,15 +4,15 @@ import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
 import { getAuthUser } from '../utils/request';
 import { tenantDbNameFromUserId } from '../data/utils';
-import { 
-  listSystemNotifications, 
-  markNotificationAsRead, 
+import {
+  listSystemNotifications,
+  markNotificationAsRead,
   markAllNotificationsAsRead,
-  deleteNotification
+  deleteNotification,
 } from '../data/repositories/notification.repository';
 
 const idParamSchema = z.object({
-  id: z.string().min(1)
+  id: z.string().min(1),
 });
 
 export const NotificationsController = {
@@ -21,7 +21,7 @@ export const NotificationsController = {
    */
   list: asyncWrapper(async (req: Request, res: Response) => {
     const user = getAuthUser(req);
-    
+
     const tenantDb = tenantDbNameFromUserId(user.id);
     const notifications = await listSystemNotifications(tenantDb);
     res.json({ notifications });
@@ -64,5 +64,5 @@ export const NotificationsController = {
     if (!success) throw new ApiError(404, 'Notificación no encontrada.');
 
     res.json({ success: true });
-  })
+  }),
 };

@@ -3,7 +3,12 @@ export class ApiError extends Error {
   public code?: string;
   public details?: Record<string, unknown>;
 
-  constructor(statusCode: number, message: string, code?: string, details?: Record<string, unknown>) {
+  constructor(
+    statusCode: number,
+    message: string,
+    code?: string,
+    details?: Record<string, unknown>,
+  ) {
     super(message);
     this.statusCode = statusCode;
     this.name = this.constructor.name;

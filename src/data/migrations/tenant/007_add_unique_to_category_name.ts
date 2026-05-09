@@ -4,9 +4,9 @@ export async function up({ context }: { context: MigrationContext }): Promise<vo
   const db = context.connection;
   // 1. Añadir el índice UNIQUE a la columna 'name' de la tabla 'categories'
   // Nota: Si ya existen duplicados, esto fallará, por lo que primero deberíamos limpiar.
-  // Sin embargo, en un entorno multi-tenant controlado, es mejor limpiar manualmente 
+  // Sin embargo, en un entorno multi-tenant controlado, es mejor limpiar manualmente
   // o hacer un script de limpieza previo.
-  
+
   // Script de limpieza: Mover servicios a la categoría con ID más bajo para el mismo nombre
   await db.query(`
     UPDATE services s

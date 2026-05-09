@@ -120,7 +120,7 @@ export const ALL_MODULES: AppModule[] = [
   },
 ];
 
-const ALL_MODULE_IDS: ModuleId[] = ALL_MODULES.map(m => m.id as ModuleId);
+const ALL_MODULE_IDS: ModuleId[] = ALL_MODULES.map((m) => m.id as ModuleId);
 
 export const PLANS: Plan[] = [
   {

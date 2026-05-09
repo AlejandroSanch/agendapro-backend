@@ -15,23 +15,33 @@ export async function up({ context }: { context: MigrationContext }): Promise<vo
 
   // Añadimos el nuevo índice compuesto
   try {
-    await db.query('ALTER TABLE categories ADD UNIQUE INDEX idx_category_name_type_unique (name, type)');
+    await db.query(
+      'ALTER TABLE categories ADD UNIQUE INDEX idx_category_name_type_unique (name, type)',
+    );
   } catch (e) {
     // Si ya existe, lo ignoramos
   }
 
   // Obtener todas las categorías
-  const [categories] = await db.query<RowDataPacket[]>('SELECT id, name, description FROM categories');
+  const [categories] = await db.query<RowDataPacket[]>(
+    'SELECT id, name, description FROM categories',
+  );
 
   for (const cat of categories) {
     const catId = cat.id;
 
     // Chequear servicios
-    const [services] = await db.query<RowDataPacket[]>('SELECT COUNT(*) AS total FROM services WHERE category_id = ?', [catId]);
+    const [services] = await db.query<RowDataPacket[]>(
+      'SELECT COUNT(*) AS total FROM services WHERE category_id = ?',
+      [catId],
+    );
     const hasServices = Number(services[0]?.total ?? 0) > 0;
 
     // Chequear productos
-    const [products] = await db.query<RowDataPacket[]>('SELECT COUNT(*) AS total FROM products WHERE category_id = ?', [catId]);
+    const [products] = await db.query<RowDataPacket[]>(
+      'SELECT COUNT(*) AS total FROM products WHERE category_id = ?',
+      [catId],
+    );
     const hasProducts = Number(products[0]?.total ?? 0) > 0;
 
     if (hasServices && hasProducts) {
@@ -39,10 +49,18 @@ export async function up({ context }: { context: MigrationContext }): Promise<vo
       await db.query('UPDATE categories SET type = ? WHERE id = ?', ['service', catId]);
 
       const newCatId = `cat_${randomUUID()}`;
-      await db.query('INSERT INTO categories (id, name, description, type) VALUES (?, ?, ?, ?)', [newCatId, cat.name, cat.description || '', 'product']);
+      await db.query('INSERT INTO categories (id, name, description, type) VALUES (?, ?, ?, ?)', [
+        newCatId,
+        cat.name,
+        cat.description || '',
+        'product',
+      ]);
 
       // Migrar todos los productos a la nueva categoría
-      await db.query('UPDATE products SET category_id = ? WHERE category_id = ?', [newCatId, catId]);
+      await db.query('UPDATE products SET category_id = ? WHERE category_id = ?', [
+        newCatId,
+        catId,
+      ]);
     } else if (hasServices) {
       // Solo tiene servicios
       await db.query('UPDATE categories SET type = ? WHERE id = ?', ['service', catId]);

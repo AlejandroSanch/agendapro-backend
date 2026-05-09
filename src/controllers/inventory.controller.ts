@@ -23,10 +23,10 @@ export const InventoryController = {
   createMovement: asyncWrapper(async (req: Request, res: Response) => {
     const user = getAuthUser(req);
     const data = createMovementSchema.parse(req.body);
-    
+
     const result = await adjustStock(user.id, data);
     if (!result) throw new ApiError(404, 'Producto no encontrado.');
-    
+
     res.status(201).json({ log: result });
   }),
 };

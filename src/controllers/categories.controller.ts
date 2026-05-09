@@ -75,10 +75,14 @@ export const CategoriesController = {
       if (!deleted) throw new ApiError(404, 'Categoria no encontrada.');
       res.json({ ok: true });
     } catch (error) {
-      if (error instanceof Error && (error.message.includes('servicios asociados') || error.message.includes('productos asociados'))) {
+      if (
+        error instanceof Error &&
+        (error.message.includes('servicios asociados') ||
+          error.message.includes('productos asociados'))
+      ) {
         throw new ApiError(409, error.message);
       }
       throw error;
     }
-  })
+  }),
 };

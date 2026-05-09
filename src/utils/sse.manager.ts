@@ -38,5 +38,5 @@ export const SseManager = {
         client.write(payload);
       });
     }
-  }
+  },
 };

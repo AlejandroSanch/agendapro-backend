@@ -78,7 +78,7 @@ export const AppointmentsController = {
 
   list: asyncWrapper(async (req: Request, res: Response) => {
     const user = getAuthUser(req);
-    
+
     const query = dateRangeQuerySchema.parse(req.query);
     const { data, total } = await listAppointments(user.id, {
       dateFrom: query.dateFrom,
@@ -87,13 +87,13 @@ export const AppointmentsController = {
       limit: query.limit,
     });
 
-    res.json({ 
+    res.json({
       appointments: data.map(toApiAppointment),
       pagination: {
         page: query.page,
         limit: query.limit,
-        total
-      }
+        total,
+      },
     });
   }),
 
@@ -126,22 +126,25 @@ export const AppointmentsController = {
     try {
       const appointment = await createAppointment(user.id, payload);
       if (!appointment) throw new ApiError(500, 'No se pudo crear la cita.');
-      
+
       const apiAppointment = toApiAppointment(appointment);
-      SseManager.broadcast(user.id, 'appointments_updated', { action: 'create', appointment: apiAppointment });
-      
+      SseManager.broadcast(user.id, 'appointments_updated', {
+        action: 'create',
+        appointment: apiAppointment,
+      });
+
       // Enviar confirmación por WhatsApp si hay teléfono
       if (apiAppointment.clienteTelefono) {
         let cleanPhone = apiAppointment.clienteTelefono.replace(/\D/g, '');
         if (cleanPhone.length === 10) cleanPhone = '52' + cleanPhone;
-        
+
         WhatsAppService.sendAppointmentConfirmation(
           cleanPhone,
           apiAppointment.clienteNombre,
           apiAppointment.servicio,
           apiAppointment.fecha,
-          apiAppointment.hora
-        ).catch(err => console.error('Error enviando confirmación WA:', err));
+          apiAppointment.hora,
+        ).catch((err) => console.error('Error enviando confirmación WA:', err));
       }
 
       // Sincronizar asincrónicamente con Google Calendar
@@ -194,10 +197,13 @@ export const AppointmentsController = {
     try {
       const appointment = await updateAppointment(user.id, params.id, payload);
       if (!appointment) throw new ApiError(404, 'Cita no encontrada.');
-      
+
       const apiAppointment = toApiAppointment(appointment);
-      SseManager.broadcast(user.id, 'appointments_updated', { action: 'update', appointment: apiAppointment });
-      
+      SseManager.broadcast(user.id, 'appointments_updated', {
+        action: 'update',
+        appointment: apiAppointment,
+      });
+
       const googleAction = apiAppointment.estado === 'cancelada' ? 'delete' : 'update';
       GoogleCalendarService.pushEvent(user.id, apiAppointment, googleAction).catch(console.error);
 
@@ -208,5 +214,5 @@ export const AppointmentsController = {
       }
       throw error;
     }
-  })
+  }),
 };

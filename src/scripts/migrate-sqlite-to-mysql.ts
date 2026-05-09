@@ -1,4 +1,3 @@
-
 import { existsSync } from 'fs';
 import { isAbsolute, join } from 'path';
 import mysql, { PoolConnection } from 'mysql2/promise';
@@ -68,8 +67,10 @@ interface SqliteAppointmentRow {
 }
 
 async function main(): Promise<void> {
-  let DatabaseSyncCtor: (new (path: string) => any) | null = null;
+  let DatabaseSyncCtor: (new (path: string) => any) | null;
   try {
+    const { createRequire } = await import('module');
+    const require = createRequire(import.meta.url);
     DatabaseSyncCtor = require('node:sqlite').DatabaseSync as new (path: string) => any;
   } catch {
     console.error('node:sqlite no disponible en esta version de Node.');
@@ -81,7 +82,7 @@ async function main(): Promise<void> {
 
   const sqliteControlDbPath = resolvePath(
     env.sqliteControlDbPath,
-    join(process.cwd(), 'storage', 'control.db')
+    join(process.cwd(), 'storage', 'control.db'),
   );
 
   if (!existsSync(sqliteControlDbPath)) {
@@ -109,7 +110,7 @@ async function main(): Promise<void> {
       `
         SELECT id, name, email, password, plan, business_name, avatar_initials, tenant_db_path
         FROM users
-      `
+      `,
     )
     .all() as SqliteControlUserRow[];
 
@@ -151,7 +152,11 @@ async function main(): Promise<void> {
 
   console.log(`Migracion completada. Usuarios migrados: ${users.length}`);
 }
-async function migrateTenant(connection: PoolConnection, tenantDb: any, userId: string): Promise<void> {
+async function migrateTenant(
+  connection: PoolConnection,
+  tenantDb: any,
+  userId: string,
+): Promise<void> {
   const moduleOverrides = tenantDb
     .prepare('SELECT module_id, enabled FROM module_overrides')
     .all() as SqliteModuleOverrideRow[];
@@ -164,7 +169,7 @@ async function migrateTenant(connection: PoolConnection, tenantDb: any, userId: 
         VALUES (?, ?, ?, NOW())
         ON DUPLICATE KEY UPDATE enabled = VALUES(enabled), updated_at = NOW()
       `,
-      [userId, row.module_id, row.enabled === 1 ? 1 : 0]
+      [userId, row.module_id, row.enabled === 1 ? 1 : 0],
     );
   }
 
@@ -194,12 +199,14 @@ async function migrateTenant(connection: PoolConnection, tenantDb: any, userId: 
         normalizeNullable(row.notes),
         normalizeDateTime(row.created_at),
         normalizeDateTime(row.updated_at),
-      ]
+      ],
     );
   }
 
   const services = tenantDb
-    .prepare('SELECT id, name, duration_minutes, price_cents, is_active, created_at, updated_at FROM services')
+    .prepare(
+      'SELECT id, name, duration_minutes, price_cents, is_active, created_at, updated_at FROM services',
+    )
     .all() as SqliteServiceRow[];
 
   for (const row of services) {
@@ -224,12 +231,14 @@ async function migrateTenant(connection: PoolConnection, tenantDb: any, userId: 
         row.is_active === 0 ? 0 : 1,
         normalizeDateTime(row.created_at),
         normalizeDateTime(row.updated_at),
-      ]
+      ],
     );
   }
 
   const staff = tenantDb
-    .prepare('SELECT id, full_name, email, phone, role, is_active, created_at, updated_at FROM staff')
+    .prepare(
+      'SELECT id, full_name, email, phone, role, is_active, created_at, updated_at FROM staff',
+    )
     .all() as SqliteStaffRow[];
 
   for (const row of staff) {
@@ -256,12 +265,14 @@ async function migrateTenant(connection: PoolConnection, tenantDb: any, userId: 
         row.is_active === 0 ? 0 : 1,
         normalizeDateTime(row.created_at),
         normalizeDateTime(row.updated_at),
-      ]
+      ],
     );
   }
 
   const appointments = tenantDb
-    .prepare('SELECT id, customer_id, service_id, staff_id, title, status, start_at, end_at, notes, created_at, updated_at FROM appointments')
+    .prepare(
+      'SELECT id, customer_id, service_id, staff_id, title, status, start_at, end_at, notes, created_at, updated_at FROM appointments',
+    )
     .all() as SqliteAppointmentRow[];
 
   for (const row of appointments) {
@@ -297,14 +308,22 @@ async function migrateTenant(connection: PoolConnection, tenantDb: any, userId: 
         normalizeNullable(row.notes),
         normalizeDateTime(row.created_at),
         normalizeDateTime(row.updated_at),
-      ]
+      ],
     );
   }
 }
 
 async function upsertUser(
   connection: PoolConnection,
-  user: { id: string; name: string; email: string; password: string; plan: PlanId; businessName: string; avatarInitials: string | null }
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    password: string;
+    plan: PlanId;
+    businessName: string;
+    avatarInitials: string | null;
+  },
 ): Promise<void> {
   await connection.query(
     `
@@ -319,12 +338,30 @@ async function upsertUser(
         avatar_initials = VALUES(avatar_initials),
         updated_at = NOW()
     `,
-    [user.id, user.name, user.email, user.password, user.plan, user.businessName, user.avatarInitials]
+    [
+      user.id,
+      user.name,
+      user.email,
+      user.password,
+      user.plan,
+      user.businessName,
+      user.avatarInitials,
+    ],
   );
 }
 
-function normalizeUser(row: SqliteControlUserRow): { id: string; name: string; email: string; password: string; plan: PlanId; businessName: string; avatarInitials: string | null } {
-  const email = String(row.email || '').trim().toLowerCase();
+function normalizeUser(row: SqliteControlUserRow): {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+  plan: PlanId;
+  businessName: string;
+  avatarInitials: string | null;
+} {
+  const email = String(row.email || '')
+    .trim()
+    .toLowerCase();
   const name = String(row.name || '').trim() || 'Usuario';
 
   return {
@@ -343,7 +380,12 @@ function toPlan(value: string): PlanId {
 }
 
 function normalizeStatus(value: string): string {
-  if (value === 'confirmed' || value === 'completed' || value === 'cancelled' || value === 'no_show') {
+  if (
+    value === 'confirmed' ||
+    value === 'completed' ||
+    value === 'cancelled' ||
+    value === 'no_show'
+  ) {
     return value;
   }
   return 'scheduled';

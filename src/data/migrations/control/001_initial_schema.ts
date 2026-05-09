@@ -23,7 +23,13 @@ export async function up({ context }: { context: MigrationContext }): Promise<vo
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
-  try { await db.query(`CREATE UNIQUE INDEX idx_users_email_verification_token ON users (email_verification_token)`); } catch (e: any) { if (e.code !== 'ER_DUP_KEYNAME') throw e; }
+  try {
+    await db.query(
+      `CREATE UNIQUE INDEX idx_users_email_verification_token ON users (email_verification_token)`,
+    );
+  } catch (e: any) {
+    if (e.code !== 'ER_DUP_KEYNAME') throw e;
+  }
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS module_overrides (
@@ -34,7 +40,6 @@ export async function up({ context }: { context: MigrationContext }): Promise<vo
       PRIMARY KEY (user_id, module_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
-
 }
 
 // Opcional

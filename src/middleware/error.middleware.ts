@@ -8,7 +8,7 @@ export function globalErrorHandler(
   req: Request,
   res: Response,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  next: NextFunction
+  next: NextFunction,
 ): void {
   // Manejo elegante de Validación en Zod
   if (err instanceof z.ZodError) {
@@ -22,7 +22,7 @@ export function globalErrorHandler(
     res.status(err.statusCode).json({
       error: err.message,
       code: err.code,
-      ...(err.details ? { details: err.details } : {})
+      ...(err.details ? { details: err.details } : {}),
     });
     return;
   }
@@ -34,15 +34,18 @@ export function globalErrorHandler(
   }
 
   // Log interno para Errores Inesperados de Infraestructura
-  logger.error({ 
-    err,
-    method: req.method,
-    url: req.originalUrl,
-    ip: req.ip
-  }, '[Error no controlado]');
+  logger.error(
+    {
+      err,
+      method: req.method,
+      url: req.originalUrl,
+      ip: req.ip,
+    },
+    '[Error no controlado]',
+  );
 
-  res.status(500).json({ 
+  res.status(500).json({
     error: 'Error interno del servidor.',
-    code: 'INTERNAL_SERVER_ERROR'
+    code: 'INTERNAL_SERVER_ERROR',
   });
 }

@@ -15,7 +15,7 @@ export async function initializeStore(): Promise<void> {
   initializingPromise = (async () => {
     // 1. Asegurar la creación física del DB Control y su pool
     await ensureControlDatabaseAndPool();
-    
+
     // 2. Correr las migraciones de Umzug en el Control DB
     const controlMigrator = getControlMigrator();
     await controlMigrator.up();
@@ -24,7 +24,7 @@ export async function initializeStore(): Promise<void> {
     await backfillTenantDbNames();
     await migrateLegacySharedTablesToTenantDbs();
     await ensureDemoUserIfNeeded();
-    
+
     // 4. Correr las migraciones de Umzug dinámicamente en todos los Tenant DBs
     await ensureAllTenantSchemas();
   })();
@@ -68,7 +68,16 @@ async function ensureDemoUserIfNeeded(): Promise<void> {
       )
       VALUES (?, ?, ?, ?, 1, NULL, NOW(), ?, ?, ?, ?, 1, NOW(), NOW())
     `,
-    [demoId, 'Daniel Hernandez', 'demo@agendapro.com', hashPassword('demo123'), 'pro', 'Mi Negocio', 'DH', demoTenantDbName]
+    [
+      demoId,
+      'Daniel Hernandez',
+      'demo@agendapro.com',
+      hashPassword('demo123'),
+      'pro',
+      'Mi Negocio',
+      'DH',
+      demoTenantDbName,
+    ],
   );
 
   await ensureTenantSchema(demoTenantDbName);
@@ -92,9 +101,10 @@ async function ensureAllTenantSchemas(): Promise<void> {
  */
 export async function ensureTenantSchema(tenantDbName: string): Promise<void> {
   const db = getControlPool();
-  
-  await db.query(`CREATE DATABASE IF NOT EXISTS ${q(tenantDbName)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
 
+  await db.query(
+    `CREATE DATABASE IF NOT EXISTS ${q(tenantDbName)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  );
 
   // Ahora que la BD existe físicamente en MySQL, inyectamos a Umzug
   const { migrator, pool } = getTenantMigrator(tenantDbName);
@@ -128,7 +138,7 @@ async function migrateLegacySharedTablesToTenantDbs(): Promise<void> {
         WHERE user_id = ?
         ON DUPLICATE KEY UPDATE enabled = VALUES(enabled), updated_at = VALUES(updated_at)
       `,
-      [user.id]
+      [user.id],
     );
 
     await db.query(
@@ -139,7 +149,7 @@ async function migrateLegacySharedTablesToTenantDbs(): Promise<void> {
         WHERE user_id = ?
         ON DUPLICATE KEY UPDATE full_name = VALUES(full_name), email = VALUES(email), phone = VALUES(phone), notes = VALUES(notes), updated_at = VALUES(updated_at)
       `,
-      [user.id]
+      [user.id],
     );
 
     // Omito los demás para brevedad, ya que esto sólo ocurre una vez en un backend que transicionó de SQLite.
@@ -156,7 +166,7 @@ async function controlTableExists(tableName: string): Promise<boolean> {
       WHERE table_schema = ?
         AND table_name = ?
     `,
-    [env.mysqlDatabase, tableName]
+    [env.mysqlDatabase, tableName],
   );
   return Number(rows[0]?.total ?? 0) > 0;
 }

@@ -8,7 +8,12 @@ import {
   updateService,
   UpdateServiceInput,
 } from '../data/repositories/service.repository';
-import { createServiceSchema, serviceIdParamSchema, updateServiceSchema, paginationQuerySchema } from '../validators/services.validators';
+import {
+  createServiceSchema,
+  serviceIdParamSchema,
+  updateServiceSchema,
+  paginationQuerySchema,
+} from '../validators/services.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
 import { cleanDeletedName } from '../utils/sanitize';
@@ -48,13 +53,13 @@ export const ServicesController = {
       page: query.page,
       limit: query.limit,
     });
-    res.json({ 
+    res.json({
       services: data.map(toApiService),
       pagination: {
         page: query.page,
         limit: query.limit,
-        total
-      }
+        total,
+      },
     });
   }),
 
@@ -62,7 +67,7 @@ export const ServicesController = {
     const user = getAuthUser(req);
 
     const data = createServiceSchema.parse(req.body);
-    
+
     const payload = {
       name: data.nombre,
       durationMin: data.duracionMin,
@@ -78,7 +83,8 @@ export const ServicesController = {
       if (!created) throw new ApiError(404, 'Usuario no encontrado.');
       res.status(201).json({ service: toApiService(created) });
     } catch (error) {
-      if (isDuplicateNameError(error)) throw new ApiError(409, 'Ya existe un servicio con ese nombre.');
+      if (isDuplicateNameError(error))
+        throw new ApiError(409, 'Ya existe un servicio con ese nombre.');
       throw error;
     }
   }),
@@ -103,7 +109,8 @@ export const ServicesController = {
       if (!updated) throw new ApiError(404, 'Servicio no encontrado.');
       res.json({ service: toApiService(updated) });
     } catch (error) {
-      if (isDuplicateNameError(error)) throw new ApiError(409, 'Ya existe un servicio con ese nombre.');
+      if (isDuplicateNameError(error))
+        throw new ApiError(409, 'Ya existe un servicio con ese nombre.');
       throw error;
     }
   }),
@@ -117,17 +124,20 @@ export const ServicesController = {
       // 1. Verificar si tiene citas activas (programadas o confirmadas)
       const hasActive = await hasActiveAppointments(user.id, params.id);
       if (hasActive) {
-        throw new ApiError(409, 'No se puede eliminar: el servicio tiene citas próximas programadas. Por favor cámbialas o cancélalas primero.');
+        throw new ApiError(
+          409,
+          'No se puede eliminar: el servicio tiene citas próximas programadas. Por favor cámbialas o cancélalas primero.',
+        );
       }
 
       // 2. Realizar borrado lógico
       const deleted = await deleteService(user.id, params.id);
       if (!deleted) throw new ApiError(404, 'Servicio no encontrado o ya eliminado.');
-      
+
       res.json({ ok: true });
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw error;
     }
-  })
+  }),
 };

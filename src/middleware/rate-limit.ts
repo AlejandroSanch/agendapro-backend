@@ -6,7 +6,7 @@ export const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 500,
   message: { error: 'Demasiadas peticiones al servidor. Por favor, intenta más tarde.' },
-  standardHeaders: true, 
+  standardHeaders: true,
   legacyHeaders: false,
 });
 
@@ -15,7 +15,10 @@ export const globalLimiter = rateLimit({
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
-  message: { error: 'Has superado el límite de seguridad de intentos permitidos. Intenta de nuevo en 15 minutos.' },
+  message: {
+    error:
+      'Has superado el límite de seguridad de intentos permitidos. Intenta de nuevo en 15 minutos.',
+  },
   standardHeaders: true,
   legacyHeaders: false,
 });

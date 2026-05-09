@@ -9,11 +9,13 @@ export async function up({ context }: { context: MigrationContext }): Promise<vo
 
   // Check if column already exists
   const [cols] = await db.query<any[]>(
-    `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'staff' AND COLUMN_NAME = 'has_custom_schedule'`
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'staff' AND COLUMN_NAME = 'has_custom_schedule'`,
   );
 
   if (cols.length === 0) {
-    await db.query(`ALTER TABLE staff ADD COLUMN has_custom_schedule TINYINT(1) NOT NULL DEFAULT 0 AFTER is_active`);
+    await db.query(
+      `ALTER TABLE staff ADD COLUMN has_custom_schedule TINYINT(1) NOT NULL DEFAULT 0 AFTER is_active`,
+    );
   }
 }
 

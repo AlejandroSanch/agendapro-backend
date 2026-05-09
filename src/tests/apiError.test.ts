@@ -26,7 +26,7 @@ describe('ApiError Custom Utility', () => {
 
   it('debería heredar nativamente de Error de JS', () => {
     const error = new ApiError(500, 'Server Crashed');
-    
+
     expect(error instanceof Error).toBe(true);
   });
 });

@@ -48,7 +48,7 @@ interface TenantProductRow extends RowDataPacket {
 
 export async function listProducts(
   userId: string,
-  pagination?: { page?: number; limit?: number }
+  pagination?: { page?: number; limit?: number },
 ): Promise<{ data: ProductRecord[]; total: number }> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return { data: [], total: 0 };
@@ -57,7 +57,7 @@ export async function listProducts(
 
   // 1. Get total count
   const [countRows] = await db.query<RowDataPacket[]>(
-    `SELECT COUNT(*) as total FROM ${q(tenantDbName)}.products`
+    `SELECT COUNT(*) as total FROM ${q(tenantDbName)}.products`,
   );
   const total = Number(countRows[0]?.total ?? 0);
 
@@ -73,18 +73,18 @@ export async function listProducts(
       ORDER BY name ASC
       LIMIT ? OFFSET ?
     `,
-    [limit, offset]
+    [limit, offset],
   );
 
   return {
     data: rows.map(toProductRecord),
-    total
+    total,
   };
 }
 
 export async function createProduct(
   userId: string,
-  input: CreateProductInput
+  input: CreateProductInput,
 ): Promise<ProductRecord | null> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return null;
@@ -107,8 +107,8 @@ export async function createProduct(
       input.costCents ?? 0,
       input.stockQuantity ?? 0,
       input.reorderAlertLevel ?? 0,
-      input.isActive ?? true ? 1 : 0,
-    ]
+      (input.isActive ?? true) ? 1 : 0,
+    ],
   );
 
   return getProductById(tenantDbName, result.insertId.toString());
@@ -117,33 +117,63 @@ export async function createProduct(
 export async function updateProduct(
   userId: string,
   productId: string,
-  input: UpdateProductInput
+  input: UpdateProductInput,
 ): Promise<ProductRecord | null> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return null;
 
   const db = getControlPool();
-  
+
   const fields: string[] = [];
   const values: any[] = [];
 
-  if (input.supplierId !== undefined) { fields.push('supplier_id = ?'); values.push(input.supplierId); }
-  if (input.categoryId !== undefined) { fields.push('category_id = ?'); values.push(input.categoryId); }
-  if (input.sku !== undefined) { fields.push('sku = ?'); values.push(input.sku); }
-  if (input.name !== undefined) { fields.push('name = ?'); values.push(input.name); }
-  if (input.unit !== undefined) { fields.push('unit = ?'); values.push(input.unit); }
-  if (input.priceCents !== undefined) { fields.push('price_cents = ?'); values.push(input.priceCents); }
-  if (input.costCents !== undefined) { fields.push('cost_cents = ?'); values.push(input.costCents); }
-  if (input.stockQuantity !== undefined) { fields.push('stock_quantity = ?'); values.push(input.stockQuantity); }
-  if (input.reorderAlertLevel !== undefined) { fields.push('reorder_alert_level = ?'); values.push(input.reorderAlertLevel); }
-  if (input.isActive !== undefined) { fields.push('is_active = ?'); values.push(input.isActive ? 1 : 0); }
+  if (input.supplierId !== undefined) {
+    fields.push('supplier_id = ?');
+    values.push(input.supplierId);
+  }
+  if (input.categoryId !== undefined) {
+    fields.push('category_id = ?');
+    values.push(input.categoryId);
+  }
+  if (input.sku !== undefined) {
+    fields.push('sku = ?');
+    values.push(input.sku);
+  }
+  if (input.name !== undefined) {
+    fields.push('name = ?');
+    values.push(input.name);
+  }
+  if (input.unit !== undefined) {
+    fields.push('unit = ?');
+    values.push(input.unit);
+  }
+  if (input.priceCents !== undefined) {
+    fields.push('price_cents = ?');
+    values.push(input.priceCents);
+  }
+  if (input.costCents !== undefined) {
+    fields.push('cost_cents = ?');
+    values.push(input.costCents);
+  }
+  if (input.stockQuantity !== undefined) {
+    fields.push('stock_quantity = ?');
+    values.push(input.stockQuantity);
+  }
+  if (input.reorderAlertLevel !== undefined) {
+    fields.push('reorder_alert_level = ?');
+    values.push(input.reorderAlertLevel);
+  }
+  if (input.isActive !== undefined) {
+    fields.push('is_active = ?');
+    values.push(input.isActive ? 1 : 0);
+  }
 
   if (fields.length === 0) return getProductById(tenantDbName, productId);
 
   values.push(productId);
   await db.query(
     `UPDATE ${q(tenantDbName)}.products SET ${fields.join(', ')} WHERE id = ?`,
-    values
+    values,
   );
 
   return getProductById(tenantDbName, productId);
@@ -151,12 +181,12 @@ export async function updateProduct(
 
 export async function getProductById(
   tenantDbName: string,
-  productId: string
+  productId: string,
 ): Promise<ProductRecord | null> {
   const db = getControlPool();
   const [rows] = await db.query<TenantProductRow[]>(
     `SELECT * FROM ${q(tenantDbName)}.products WHERE id = ? LIMIT 1`,
-    [productId]
+    [productId],
   );
 
   const row = rows[0];
@@ -182,15 +212,15 @@ function toProductRecord(row: TenantProductRow): ProductRecord {
 
 export async function createProductsBulk(
   userId: string,
-  inputs: CreateProductInput[]
+  inputs: CreateProductInput[],
 ): Promise<number> {
   if (inputs.length === 0) return 0;
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return 0;
 
   const db = getControlPool();
-  
-  const values = inputs.map(input => [
+
+  const values = inputs.map((input) => [
     input.supplierId ?? null,
     input.categoryId ?? null,
     input.sku ?? null,
@@ -200,7 +230,7 @@ export async function createProductsBulk(
     input.costCents ?? 0,
     input.stockQuantity ?? 0,
     input.reorderAlertLevel ?? 0,
-    input.isActive ?? true ? 1 : 0,
+    (input.isActive ?? true) ? 1 : 0,
   ]);
 
   const [result] = await db.query<ResultSetHeader>(
@@ -210,7 +240,7 @@ export async function createProductsBulk(
       )
       VALUES ?
     `,
-    [values]
+    [values],
   );
 
   return result.affectedRows;
@@ -224,7 +254,7 @@ export async function deleteProduct(userId: string, productId: string): Promise<
 
   const [result] = await db.query<ResultSetHeader>(
     `DELETE FROM ${q(tenantDbName)}.products WHERE id = ?`,
-    [productId]
+    [productId],
   );
 
   return result.affectedRows > 0;

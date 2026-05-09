@@ -9,7 +9,7 @@ describe('Data Utils (Criptografía y Formateo)', () => {
     it('debería hacer hash a un texto plano y retornar un string seguro distinto al input', () => {
       const plaintext = 'AgendaPro2026';
       const hashed = hashPassword(plaintext);
-      
+
       expect(hashed).toBeDefined();
       expect(hashed.length).toBeGreaterThan(20);
       expect(hashed).not.toEqual(plaintext);
@@ -18,7 +18,7 @@ describe('Data Utils (Criptografía y Formateo)', () => {
     it('debería retornar true si el texto plano es el correcto contra su hash', () => {
       const plaintext = 'AgendaPro2026';
       const hashed = hashPassword(plaintext);
-      
+
       const isValid = verifyPasswordPlain(hashed, plaintext);
       expect(isValid).toBe(true);
     });
@@ -26,7 +26,7 @@ describe('Data Utils (Criptografía y Formateo)', () => {
     it('debería retornar false si el texto plano NO coincide con el hash', () => {
       const plaintext = 'AgendaPro2026';
       const hashed = hashPassword(plaintext);
-      
+
       const isValid = verifyPasswordPlain(hashed, 'MalaPassword123');
       expect(isValid).toBe(false);
     });

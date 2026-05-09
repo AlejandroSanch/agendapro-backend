@@ -1,4 +1,3 @@
-
 import { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { getControlPool } from '../db';
 import { q } from '../utils';
@@ -123,7 +122,7 @@ export async function listStaff(userId: string): Promise<StaffRecord[]> {
       JOIN ${q(tenantDbName)}.roles r ON r.id = s.role_id
       WHERE s.deleted_at IS NULL
       ORDER BY s.first_name ASC, s.last_name ASC
-    `
+    `,
   );
 
   const results: StaffRecord[] = [];
@@ -140,7 +139,7 @@ export async function listStaff(userId: string): Promise<StaffRecord[]> {
 
 export async function createStaff(
   userId: string,
-  input: CreateStaffInput
+  input: CreateStaffInput,
 ): Promise<StaffRecord | null> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return null;
@@ -177,7 +176,7 @@ export async function createStaff(
         hasCustomBreak ? 1 : 0,
         input.descansoDesde ? input.descansoDesde + ':00' : null,
         input.descansoHasta ? input.descansoHasta + ':00' : null,
-      ]
+      ],
     );
 
     const staffId = result.insertId.toString();
@@ -207,7 +206,7 @@ export async function createStaff(
 export async function updateStaff(
   userId: string,
   staffId: string,
-  input: UpdateStaffInput
+  input: UpdateStaffInput,
 ): Promise<StaffRecord | null> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return null;
@@ -221,7 +220,7 @@ export async function updateStaff(
     // Verificar existencia
     const [existing] = await connection.query<StaffRow[]>(
       `SELECT id FROM ${q(tenantDbName)}.staff WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
-      [staffId]
+      [staffId],
     );
     if (!existing[0]) {
       await connection.rollback();
@@ -283,7 +282,7 @@ export async function updateStaff(
       params.push(staffId);
       await connection.query(
         `UPDATE ${q(tenantDbName)}.staff SET ${sets.join(', ')} WHERE id = ?`,
-        params
+        params,
       );
     }
 
@@ -307,7 +306,7 @@ export async function updateStaff(
 
 export async function toggleStaffActive(
   userId: string,
-  staffId: string
+  staffId: string,
 ): Promise<StaffRecord | null> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return null;
@@ -315,7 +314,7 @@ export async function toggleStaffActive(
   const db = getControlPool();
   const [result] = await db.query<ResultSetHeader>(
     `UPDATE ${q(tenantDbName)}.staff SET is_active = NOT is_active, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL`,
-    [staffId]
+    [staffId],
   );
 
   if (!result.affectedRows) return null;
@@ -327,7 +326,7 @@ export async function deleteStaff(userId: string, staffId: string): Promise<bool
   if (!tenantDbName) return false;
 
   const db = getControlPool();
-  
+
   // Renombramos el staff al "borrarlo" para liberar el nombre original
   // y lo marcamos con deleted_at
   const [result] = await db.query<ResultSetHeader>(
@@ -338,7 +337,7 @@ export async function deleteStaff(userId: string, staffId: string): Promise<bool
         is_active = 0
       WHERE id = ? AND deleted_at IS NULL
     `,
-    [staffId]
+    [staffId],
   );
 
   return result.affectedRows > 0;
@@ -349,7 +348,7 @@ export async function deleteStaff(userId: string, staffId: string): Promise<bool
 async function getStaffById(
   tenantDbName: string,
   staffId: string,
-  colorIndex?: number
+  colorIndex?: number,
 ): Promise<StaffRecord | null> {
   const db = getControlPool();
   const [rows] = await db.query<StaffRow[]>(
@@ -361,7 +360,7 @@ async function getStaffById(
       JOIN ${q(tenantDbName)}.roles r ON r.id = s.role_id
       WHERE s.id = ? LIMIT 1
     `,
-    [staffId]
+    [staffId],
   );
 
   const row = rows[0];
@@ -373,7 +372,7 @@ async function getStaffById(
   // Determine color index if not given
   if (colorIndex === undefined) {
     const [allRows] = await db.query<RowDataPacket[]>(
-      `SELECT id FROM ${q(tenantDbName)}.staff WHERE deleted_at IS NULL ORDER BY created_at ASC`
+      `SELECT id FROM ${q(tenantDbName)}.staff WHERE deleted_at IS NULL ORDER BY created_at ASC`,
     );
     colorIndex = allRows.findIndex((r) => String(r.id) === String(staffId));
     if (colorIndex < 0) colorIndex = 0;
@@ -382,10 +381,7 @@ async function getStaffById(
   return toStaffRecord(row, especialidades, horario, colorIndex);
 }
 
-async function getStaffEspecialidades(
-  tenantDbName: string,
-  staffId: string
-): Promise<string[]> {
+async function getStaffEspecialidades(tenantDbName: string, staffId: string): Promise<string[]> {
   const db = getControlPool();
   const [rows] = await db.query<StaffServiceRow[]>(
     `
@@ -395,14 +391,14 @@ async function getStaffEspecialidades(
       WHERE ss.staff_id = ?
       ORDER BY sv.name ASC
     `,
-    [staffId]
+    [staffId],
   );
   return rows.map((r) => r.service_name);
 }
 
 async function getStaffSchedule(
   tenantDbName: string,
-  staffId: string
+  staffId: string,
 ): Promise<StaffScheduleDayRecord[]> {
   const db = getControlPool();
   const [rows] = await db.query<StaffScheduleRow[]>(
@@ -412,7 +408,7 @@ async function getStaffSchedule(
       WHERE staff_id = ?
       ORDER BY day_of_week ASC
     `,
-    [staffId]
+    [staffId],
   );
 
   // Construir un mapa para mergearlo con los 7 días de la semana
@@ -445,13 +441,12 @@ async function syncStaffServices(
   connection: any,
   tenantDbName: string,
   staffId: string,
-  serviceNames: string[]
+  serviceNames: string[],
 ): Promise<void> {
   // Borrar las existentes
-  await connection.query(
-    `DELETE FROM ${q(tenantDbName)}.staff_services WHERE staff_id = ?`,
-    [staffId]
-  );
+  await connection.query(`DELETE FROM ${q(tenantDbName)}.staff_services WHERE staff_id = ?`, [
+    staffId,
+  ]);
 
   if (!serviceNames.length) return;
 
@@ -459,13 +454,13 @@ async function syncStaffServices(
   const placeholders = serviceNames.map(() => '?').join(', ');
   const [serviceRows] = await connection.query(
     `SELECT id, name FROM ${q(tenantDbName)}.services WHERE name IN (${placeholders})`,
-    serviceNames
+    serviceNames,
   );
 
   for (const svc of serviceRows) {
     await connection.query(
       `INSERT IGNORE INTO ${q(tenantDbName)}.staff_services (staff_id, service_id) VALUES (?, ?)`,
-      [staffId, svc.id]
+      [staffId, svc.id],
     );
   }
 }
@@ -474,13 +469,12 @@ async function syncStaffSchedule(
   connection: any,
   tenantDbName: string,
   staffId: string,
-  horario: StaffScheduleDayRecord[]
+  horario: StaffScheduleDayRecord[],
 ): Promise<void> {
   // Borrar las existentes
-  await connection.query(
-    `DELETE FROM ${q(tenantDbName)}.staff_schedules WHERE staff_id = ?`,
-    [staffId]
-  );
+  await connection.query(`DELETE FROM ${q(tenantDbName)}.staff_schedules WHERE staff_id = ?`, [
+    staffId,
+  ]);
 
   for (const h of horario) {
     if (!h.activo) continue;
@@ -490,7 +484,7 @@ async function syncStaffSchedule(
 
     await connection.query(
       `INSERT INTO ${q(tenantDbName)}.staff_schedules (staff_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?)`,
-      [staffId, wd.dow, h.desde + ':00', h.hasta + ':00']
+      [staffId, wd.dow, h.desde + ':00', h.hasta + ':00'],
     );
   }
 }
@@ -498,7 +492,7 @@ async function syncStaffSchedule(
 async function countStaff(tenantDbName: string): Promise<number> {
   const db = getControlPool();
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT COUNT(*) AS total FROM ${q(tenantDbName)}.staff WHERE deleted_at IS NULL`
+    `SELECT COUNT(*) AS total FROM ${q(tenantDbName)}.staff WHERE deleted_at IS NULL`,
   );
   return Number(rows[0]?.total ?? 0);
 }
@@ -506,7 +500,9 @@ async function countStaff(tenantDbName: string): Promise<number> {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function splitName(fullName: string): { firstName: string; lastName: string } {
-  const parts = String(fullName || '').trim().split(/\s+/);
+  const parts = String(fullName || '')
+    .trim()
+    .split(/\s+/);
   const p0 = parts[0] || '';
   if (parts.length <= 1) {
     return { firstName: p0, lastName: '' };
@@ -532,7 +528,7 @@ function toStaffRecord(
   row: StaffRow,
   especialidades: string[],
   horario: StaffScheduleDayRecord[],
-  colorIndex: number
+  colorIndex: number,
 ): StaffRecord {
   const fullName = [row.first_name, row.last_name].filter(Boolean).join(' ');
   return {

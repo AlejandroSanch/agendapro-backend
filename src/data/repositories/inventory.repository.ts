@@ -26,7 +26,7 @@ export interface CreateInventoryLogInput {
 
 export async function listInventoryLogs(
   userId: string,
-  pagination?: { page?: number; limit?: number }
+  pagination?: { page?: number; limit?: number },
 ): Promise<{ data: InventoryLogRecord[]; total: number }> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return { data: [], total: 0 };
@@ -35,7 +35,7 @@ export async function listInventoryLogs(
 
   // 1. Get total count
   const [countRows] = await db.query<RowDataPacket[]>(
-    `SELECT COUNT(*) as total FROM ${q(tenantDbName)}.inventory_logs`
+    `SELECT COUNT(*) as total FROM ${q(tenantDbName)}.inventory_logs`,
   );
   const total = Number(countRows[0]?.total ?? 0);
 
@@ -52,11 +52,11 @@ export async function listInventoryLogs(
       ORDER BY l.created_at DESC
       LIMIT ? OFFSET ?
     `,
-    [limit, offset]
+    [limit, offset],
   );
 
   return {
-    data: rows.map(row => ({
+    data: rows.map((row) => ({
       id: String(row.id),
       productId: String(row.product_id),
       productName: row.product_name,
@@ -68,27 +68,27 @@ export async function listInventoryLogs(
       staffId: row.staff_id ? String(row.staff_id) : null,
       createdAt: row.created_at,
     })),
-    total
+    total,
   };
 }
 
 export async function adjustStock(
   userId: string,
-  input: CreateInventoryLogInput
+  input: CreateInventoryLogInput,
 ): Promise<InventoryLogRecord | null> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return null;
 
   const db = getControlPool();
-  
+
   // 1. Obtener stock actual
   const [products] = await db.query<RowDataPacket[]>(
     `SELECT stock_quantity FROM ${q(tenantDbName)}.products WHERE id = ?`,
-    [input.productId]
+    [input.productId],
   );
   const firstProduct = products[0];
   if (!firstProduct) return null;
-  
+
   const stockBefore = firstProduct.stock_quantity;
   let stockAfter = stockBefore;
 
@@ -101,13 +101,14 @@ export async function adjustStock(
   }
 
   // 2. Actualizar stock en tabla productos
-  await db.query(
-    `UPDATE ${q(tenantDbName)}.products SET stock_quantity = ? WHERE id = ?`,
-    [stockAfter, input.productId]
-  );
+  await db.query(`UPDATE ${q(tenantDbName)}.products SET stock_quantity = ? WHERE id = ?`, [
+    stockAfter,
+    input.productId,
+  ]);
 
   // 3. Crear log
-  const quantityForLog = input.type === 'adjustment' ? input.quantity - stockBefore : input.quantity;
+  const quantityForLog =
+    input.type === 'adjustment' ? input.quantity - stockBefore : input.quantity;
 
   const [result] = await db.query<ResultSetHeader>(
     `
@@ -124,7 +125,7 @@ export async function adjustStock(
       stockAfter,
       input.notes ?? null,
       input.staffId ?? null,
-    ]
+    ],
   );
 
   return {

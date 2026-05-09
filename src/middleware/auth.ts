@@ -9,6 +9,7 @@ interface AuthTokenPayload {
 }
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       user?: ReturnType<typeof sanitizeUser>;
@@ -33,7 +34,6 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     res.status(401).json({ error: 'Token requerido.' });
     return;
   }
-
 
   try {
     const payload = jwt.verify(token, env.jwtSecret) as AuthTokenPayload;

@@ -43,7 +43,8 @@ export const env = {
   smtpFromEmail: process.env.SMTP_FROM_EMAIL || 'no-reply@agendapro.com',
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-  googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:4000/api/integrations/google/callback',
+  googleRedirectUri:
+    process.env.GOOGLE_REDIRECT_URI || 'http://localhost:4000/api/integrations/google/callback',
   whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
   whatsappAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || '',
   isProduction: process.env.NODE_ENV === 'production',
@@ -52,8 +53,9 @@ export const env = {
 // Validaciones críticas de seguridad al arrancar
 if (process.env.NODE_ENV === 'production') {
   if (!process.env.JWT_SECRET) {
-    console.error('❌ FATAL: JWT_SECRET no está configurado. No se puede iniciar en producción sin un secret seguro.');
+    console.error(
+      '❌ FATAL: JWT_SECRET no está configurado. No se puede iniciar en producción sin un secret seguro.',
+    );
     process.exit(1);
   }
-
 }

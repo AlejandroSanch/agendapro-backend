@@ -23,22 +23,22 @@ app.use(globalErrorHandler);
 describe('ReportsController Integration', () => {
   it('debería retornar estadísticas agregadas por SQL correctamente', async () => {
     (getTenantDbNameByUserId as jest.Mock).mockResolvedValue('tenant_demo');
-    
+
     const mockQuery = jest.fn();
     (getControlPool as jest.Mock).mockReturnValue({
-      query: mockQuery
+      query: mockQuery,
     });
 
     // Mockeamos las 6 respuestas que espera el controlador en orden
     mockQuery
       // 1. Resumen
-      .mockResolvedValueOnce([[{ totalIngresos: 1500.50, totalCitas: 12, totalCancelaciones: 3 }]])
+      .mockResolvedValueOnce([[{ totalIngresos: 1500.5, totalCitas: 12, totalCancelaciones: 3 }]])
       // 2. Gráfico diario
       .mockResolvedValueOnce([
         [
           { label: '2023-01-01', ingresos: 1000, citas: 8, cancelaciones: 2 },
-          { label: '2023-01-02', ingresos: 500.50, citas: 4, cancelaciones: 1 }
-        ]
+          { label: '2023-01-02', ingresos: 500.5, citas: 4, cancelaciones: 1 },
+        ],
       ])
       // 3. Clientes (Total y Recurrentes)
       .mockResolvedValueOnce([[{ totalCustomers: 100, recurringCustomers: 25 }]])
@@ -48,29 +48,29 @@ describe('ReportsController Integration', () => {
       .mockResolvedValueOnce([
         [
           { nombre: 'Shampoo', stock: 50, valor: 1000 },
-          { nombre: 'Acondicionador', stock: 30, valor: 600 }
-        ]
+          { nombre: 'Acondicionador', stock: 30, valor: 600 },
+        ],
       ])
       // 5. Staff Ranking
       .mockResolvedValueOnce([
         [
           { nombre: 'Ana Lopez', citas: 10, ingresos: 1200 },
-          { nombre: 'Carlos Ruiz', citas: 2, ingresos: 300.50 }
-        ]
+          { nombre: 'Carlos Ruiz', citas: 2, ingresos: 300.5 },
+        ],
       ]);
 
     const response = await request(app).get('/api/reports/stats');
 
     expect(response.status).toBe(200);
-    
+
     // Verificaciones del summary
     expect(response.body.summary).toEqual({
-      totalIngresos: 1500.50,
+      totalIngresos: 1500.5,
       totalCitas: 12,
       totalCustomers: 100,
       recurringPct: 25, // 25 de 100 = 25%
       inventoryValue: 8000,
-      lowStockItems: 5
+      lowStockItems: 5,
     });
 
     // Verificaciones de los rankings
@@ -86,9 +86,9 @@ describe('ReportsController Integration', () => {
 
   it('debería retornar 404 si el tenant no existe', async () => {
     (getTenantDbNameByUserId as jest.Mock).mockResolvedValue(null);
-    
+
     const response = await request(app).get('/api/reports/stats');
-    
+
     expect(response.status).toBe(404);
     expect(response.body.error).toBe('Tenant no encontrado.');
   });

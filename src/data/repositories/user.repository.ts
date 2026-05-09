@@ -59,7 +59,7 @@ export async function findUserByEmail(email: string): Promise<UserRecord | undef
       SELECT id, name, email, password, email_verified, email_verification_token, terms_accepted_at, plan, business_name, avatar_initials, trial_end_date, tenant_db_name
       FROM users WHERE email = ? LIMIT 1
     `,
-    [normalizeEmail(email)]
+    [normalizeEmail(email)],
   );
 
   const row = rows[0];
@@ -75,7 +75,7 @@ export async function findUserById(id: string): Promise<UserRecord | undefined> 
       SELECT id, name, email, password, email_verified, email_verification_token, terms_accepted_at, plan, business_name, avatar_initials, trial_end_date, tenant_db_name
       FROM users WHERE id = ? LIMIT 1
     `,
-    [id]
+    [id],
   );
 
   const row = rows[0];
@@ -123,9 +123,17 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord | n
           VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, NOW(), NOW())
         `,
         [
-          user.id, user.name, user.email, user.password, user.emailVerified ? 1 : 0, user.emailVerificationToken ?? null,
-          user.plan, user.businessName, user.avatarInitials ?? null, tenantDbName,
-        ]
+          user.id,
+          user.name,
+          user.email,
+          user.password,
+          user.emailVerified ? 1 : 0,
+          user.emailVerificationToken ?? null,
+          user.plan,
+          user.businessName,
+          user.avatarInitials ?? null,
+          tenantDbName,
+        ],
       );
 
       await ensureTenantSchema(tenantDbName);
@@ -148,7 +156,7 @@ export async function verifyUserEmailByToken(token: string): Promise<UserRecord 
 
   const [existingRows] = await db.query<UserRow[]>(
     `SELECT id FROM users WHERE email_verification_token = ? LIMIT 1`,
-    [normalizedToken]
+    [normalizedToken],
   );
 
   const existing = existingRows[0];
@@ -156,7 +164,7 @@ export async function verifyUserEmailByToken(token: string): Promise<UserRecord 
 
   const [result] = await db.query<ResultSetHeader>(
     `UPDATE users SET email_verified = 1, email_verification_token = NULL, updated_at = NOW() WHERE email_verification_token = ? LIMIT 1`,
-    [normalizedToken]
+    [normalizedToken],
   );
 
   if (!result.affectedRows) return null;
@@ -172,17 +180,17 @@ export async function refreshEmailVerificationTokenByEmail(email: string): Promi
 
   const [rows] = await db.query<UserRow[]>(
     `SELECT id, email_verified FROM users WHERE email = ? LIMIT 1`,
-    [normalizedEmail]
+    [normalizedEmail],
   );
 
   const row = rows[0];
   if (!row || row.email_verified === 1) return null;
 
   const nextToken = generateEmailVerificationToken();
-  await db.query(
-    `UPDATE users SET email_verification_token = ?, updated_at = NOW() WHERE id = ?`,
-    [nextToken, row.id]
-  );
+  await db.query(`UPDATE users SET email_verification_token = ?, updated_at = NOW() WHERE id = ?`, [
+    nextToken,
+    row.id,
+  ]);
 
   return nextToken;
 }
@@ -206,7 +214,7 @@ export async function getTenantDbNameByUserId(userId: string): Promise<string | 
   const db = getControlPool();
   const [rows] = await db.query<TenantRefRow[]>(
     `SELECT id, tenant_db_name FROM users WHERE id = ? LIMIT 1`,
-    [userId]
+    [userId],
   );
 
   const row = rows[0];
@@ -221,13 +229,15 @@ export async function getTenantDbNameByUserId(userId: string): Promise<string | 
   return tenantDbName;
 }
 
-export async function getModuleOverrides(userId: string): Promise<Partial<Record<ModuleId, boolean>>> {
+export async function getModuleOverrides(
+  userId: string,
+): Promise<Partial<Record<ModuleId, boolean>>> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return {};
 
   const db = getControlPool();
   const [rows] = await db.query<ModuleOverrideRow[]>(
-    `SELECT module_id, enabled FROM ${q(tenantDbName)}.module_overrides`
+    `SELECT module_id, enabled FROM ${q(tenantDbName)}.module_overrides`,
   );
 
   const overrides: Partial<Record<ModuleId, boolean>> = {};
@@ -240,7 +250,7 @@ export async function getModuleOverrides(userId: string): Promise<Partial<Record
 export async function setModuleOverride(
   userId: string,
   moduleId: ModuleId,
-  enabled: boolean
+  enabled: boolean,
 ): Promise<Partial<Record<ModuleId, boolean>>> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return {};
@@ -252,7 +262,7 @@ export async function setModuleOverride(
       VALUES (?, ?, NOW())
       ON DUPLICATE KEY UPDATE enabled = VALUES(enabled), updated_at = NOW()
     `,
-    [moduleId, enabled ? 1 : 0]
+    [moduleId, enabled ? 1 : 0],
   );
 
   return getModuleOverrides(userId);
@@ -260,7 +270,7 @@ export async function setModuleOverride(
 
 export async function clearModuleOverride(
   userId: string,
-  moduleId: ModuleId
+  moduleId: ModuleId,
 ): Promise<Partial<Record<ModuleId, boolean>>> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return {};
@@ -274,13 +284,14 @@ export async function clearModuleOverride(
 export async function setUserPlan(userId: string, plan: PlanId): Promise<UserPublic | null> {
   const db = getControlPool();
   const normalizedPlan = normalizePlan(plan);
-  const trialEndDate = normalizedPlan === 'starter' 
-    ? null 
-    : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+  const trialEndDate =
+    normalizedPlan === 'starter'
+      ? null
+      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
 
   const [result] = await db.query<ResultSetHeader>(
     `UPDATE users SET plan = ?, trial_end_date = ?, updated_at = NOW() WHERE id = ?`,
-    [normalizedPlan, trialEndDate, userId]
+    [normalizedPlan, trialEndDate, userId],
   );
 
   if (!result.affectedRows) return null;
@@ -291,7 +302,7 @@ export async function setUserPlan(userId: string, plan: PlanId): Promise<UserPub
 
 function rowToUserRecord(
   row: UserRow,
-  moduleOverrides: Partial<Record<ModuleId, boolean>>
+  moduleOverrides: Partial<Record<ModuleId, boolean>>,
 ): UserRecord {
   return {
     id: row.id,

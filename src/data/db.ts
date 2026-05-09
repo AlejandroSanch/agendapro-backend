@@ -25,7 +25,7 @@ export async function ensureControlDatabaseAndPool(): Promise<void> {
 
   try {
     await adminPool.query(
-      `CREATE DATABASE IF NOT EXISTS ${mysql.escapeId(env.mysqlDatabase)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+      `CREATE DATABASE IF NOT EXISTS ${mysql.escapeId(env.mysqlDatabase)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
     );
   } finally {
     await adminPool.end();

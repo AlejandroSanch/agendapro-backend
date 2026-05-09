@@ -8,7 +8,13 @@ import {
   updateProduct,
   UpdateProductInput,
 } from '../data/repositories/product.repository';
-import { createProductSchema, createProductBulkSchema, productIdParamSchema, updateProductSchema, paginationQuerySchema } from '../validators/products.validators';
+import {
+  createProductSchema,
+  createProductBulkSchema,
+  productIdParamSchema,
+  updateProductSchema,
+  paginationQuerySchema,
+} from '../validators/products.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
 import { getAuthUser } from '../utils/request';
@@ -37,13 +43,13 @@ export const ProductsController = {
       page: query.page,
       limit: query.limit,
     });
-    res.json({ 
+    res.json({
       products: data.map(toApiProduct),
       pagination: {
         page: query.page,
         limit: query.limit,
-        total
-      }
+        total,
+      },
     });
   }),
 
@@ -51,7 +57,7 @@ export const ProductsController = {
     const user = getAuthUser(req);
 
     const data = createProductSchema.parse(req.body);
-    
+
     const payload = {
       name: data.nombre,
       sku: data.sku,

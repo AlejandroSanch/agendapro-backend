@@ -12,7 +12,7 @@ export async function up({ context }: { context: MigrationContext }): Promise<vo
   `);
 
   // 2. Expandir tabla inventory_logs
-  // Nota: MySQL no permite modificar ENUM fácilmente con ALTER TABLE sin recrearlo o usar trucos, 
+  // Nota: MySQL no permite modificar ENUM fácilmente con ALTER TABLE sin recrearlo o usar trucos,
   // pero aquí simplemente lo re-definimos.
   await db.query(`
     ALTER TABLE inventory_logs
@@ -28,8 +28,12 @@ export async function down({ context }: { context: MigrationContext }): Promise<
   const db = context.connection;
 
   await db.query(`ALTER TABLE inventory_logs DROP FOREIGN KEY fk_inventory_logs_staff;`);
-  await db.query(`ALTER TABLE inventory_logs DROP COLUMN staff_id, DROP COLUMN stock_before, DROP COLUMN stock_after;`);
-  await db.query(`ALTER TABLE inventory_logs MODIFY COLUMN type ENUM('in', 'out', 'adjustment', 'sale') NOT NULL;`);
+  await db.query(
+    `ALTER TABLE inventory_logs DROP COLUMN staff_id, DROP COLUMN stock_before, DROP COLUMN stock_after;`,
+  );
+  await db.query(
+    `ALTER TABLE inventory_logs MODIFY COLUMN type ENUM('in', 'out', 'adjustment', 'sale') NOT NULL;`,
+  );
 
   await db.query(`ALTER TABLE products DROP FOREIGN KEY fk_products_category;`);
   await db.query(`ALTER TABLE products DROP COLUMN category_id, DROP COLUMN unit;`);

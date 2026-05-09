@@ -32,11 +32,11 @@ export const IntegrationsController = {
 
   getStatus: asyncWrapper(async (req: Request, res: Response) => {
     const user = getAuthUser(req);
-    
+
     const db = getControlPool();
     const [rows] = await db.query(
       `SELECT provider, expires_at FROM tenant_integrations WHERE user_id = ?`,
-      [user.id]
+      [user.id],
     );
 
     res.json({ integrations: rows });
@@ -44,13 +44,13 @@ export const IntegrationsController = {
 
   disconnectGoogle: asyncWrapper(async (req: Request, res: Response) => {
     const user = getAuthUser(req);
-    
+
     const db = getControlPool();
     await db.query(
       `DELETE FROM tenant_integrations WHERE user_id = ? AND provider = 'google_calendar'`,
-      [user.id]
+      [user.id],
     );
 
     res.json({ success: true, message: 'Integración desconectada correctamente.' });
-  })
+  }),
 };

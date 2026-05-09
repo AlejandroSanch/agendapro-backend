@@ -23,7 +23,7 @@ export const OnboardingController = {
     const user = getAuthUser(req);
 
     const completed = await getOnboardingStatus(user.id);
-    const settings  = await getBusinessSettings(user.id);
+    const settings = await getBusinessSettings(user.id);
 
     res.json({ completed, settings, user });
   }),
@@ -35,20 +35,20 @@ export const OnboardingController = {
 
     const settings = await upsertBusinessSettings(user.id, {
       businessType: data.businessType,
-      phone:        data.phone,
-      address:      data.address,
-      street:       data.street,
-      extNumber:    data.extNumber,
-      intNumber:    data.intNumber,
+      phone: data.phone,
+      address: data.address,
+      street: data.street,
+      extNumber: data.extNumber,
+      intNumber: data.intNumber,
       neighborhood: data.neighborhood,
-      city:         data.city,
-      state:        data.state,
-      zipCode:      data.zipCode,
-      logoUrl:      data.logoUrl,
-      schedules:    data.schedules as any,
+      city: data.city,
+      state: data.state,
+      zipCode: data.zipCode,
+      logoUrl: data.logoUrl,
+      schedules: data.schedules as any,
       breakEnabled: data.breakEnabled,
-      breakStart:   data.breakStart,
-      breakEnd:     data.breakEnd,
+      breakStart: data.breakStart,
+      breakEnd: data.breakEnd,
     });
 
     res.json({ settings });
@@ -100,7 +100,7 @@ export const OnboardingController = {
     const user = getAuthUser(req);
 
     const data = onboardingPlanSchema.parse(req.body);
-    
+
     const updatedUser = await setUserPlan(user.id, data.plan as any);
     if (!updatedUser) throw new ApiError(404, 'Usuario no encontrado.');
 
@@ -112,5 +112,5 @@ export const OnboardingController = {
 
     await setOnboardingCompleted(user.id);
     res.json({ completed: true });
-  })
+  }),
 };

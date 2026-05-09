@@ -1,9 +1,10 @@
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
 import { Umzug } from 'umzug';
 import mysql from 'mysql2/promise';
 import { env } from '../config/env';
 import { getControlPool } from './db';
-import * as path from 'path';
-import * as fs from 'fs';
 
 // Esta interfaz es requerida internamente por umzug para inyectar su contexto en cada iteración
 export interface MigrationContext {
@@ -37,20 +38,20 @@ function buildUmzug(pool: mysql.Pool, dbName: string, migrationsPath: string) {
           ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
         const [results] = await context.connection.query<any[]>(
-          `SELECT name FROM ${mysql.escapeId(dbName)}.umzug_meta`
+          `SELECT name FROM ${mysql.escapeId(dbName)}.umzug_meta`,
         );
-        return results.map(r => r.name);
+        return results.map((r) => r.name);
       },
       async logMigration({ name, context }) {
         await context.connection.query(
           `INSERT INTO ${mysql.escapeId(dbName)}.umzug_meta (name) VALUES (?)`,
-          [name]
+          [name],
         );
       },
       async unlogMigration({ name, context }) {
         await context.connection.query(
           `DELETE FROM ${mysql.escapeId(dbName)}.umzug_meta WHERE name = ?`,
-          [name]
+          [name],
         );
       },
     },
@@ -71,7 +72,10 @@ export function getControlMigrator(): Umzug<MigrationContext> {
  * Utiliza un conector dedicado independiente.
  * IMPORTANTE: El caller debe cerrar el pool devuelto después de completar las migraciones.
  */
-export function getTenantMigrator(tenantDbName: string): { migrator: Umzug<MigrationContext>; pool: mysql.Pool } {
+export function getTenantMigrator(tenantDbName: string): {
+  migrator: Umzug<MigrationContext>;
+  pool: mysql.Pool;
+} {
   // Utilizamos la misma arquitectura que usamos explícitamente en createTenantPool,
   // con un pool transitorio para las migraciones de este tenant.
   const pool = mysql.createPool({

@@ -168,12 +168,13 @@ export async function getReportStats(tenantDbName: string): Promise<ReportStats>
       totalIngresos: Number(summary?.totalIngresos ?? 0),
       totalCitas: Number(summary?.totalCitas ?? 0),
       totalCustomers,
-      recurringPct: totalCustomers > 0 ? Math.round((recurringCustomers / totalCustomers) * 100) : 0,
+      recurringPct:
+        totalCustomers > 0 ? Math.round((recurringCustomers / totalCustomers) * 100) : 0,
       inventoryValue: Number(invSummary?.totalValue ?? 0),
       lowStockItems: Number(invSummary?.lowStockCount ?? 0),
     },
     charts: {
-      daily: dailyRows.map(r => ({
+      daily: dailyRows.map((r) => ({
         label: r.label,
         ingresos: Number(r.ingresos),
         citas: Number(r.citas),
@@ -181,13 +182,15 @@ export async function getReportStats(tenantDbName: string): Promise<ReportStats>
       })),
     },
     rankings: {
-      staff: staffRankingRows.map(r => ({
+      staff: staffRankingRows.map((r) => ({
         nombre: r.nombre,
         citas: Number(r.citas),
         ingresos: Number(r.ingresos),
-        avatar: String(r.nombre || '').substring(0, 2).toUpperCase(),
+        avatar: String(r.nombre || '')
+          .substring(0, 2)
+          .toUpperCase(),
       })),
-      inventory: invTopRows.map(r => ({
+      inventory: invTopRows.map((r) => ({
         nombre: r.nombre,
         stock: Number(r.stock),
         valor: Number(r.valor),

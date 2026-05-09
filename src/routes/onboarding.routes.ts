@@ -9,4 +9,4 @@ onboardingRouter.patch('/business', requireAuth, OnboardingController.updateBusi
 onboardingRouter.post('/services', requireAuth, OnboardingController.updateServices);
 onboardingRouter.post('/staff', requireAuth, OnboardingController.updateStaff);
 onboardingRouter.patch('/plan', requireAuth, OnboardingController.updatePlan);
-onboardingRouter.post('/complete', requireAuth, OnboardingController.completeOnboarding);
+onboardingRouter.post('/complete', requireAuth, OnboardingController.completeOnboarding);
