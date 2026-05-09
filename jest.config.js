@@ -5,7 +5,15 @@ module.exports = {
   testMatch: ['**/src/tests/**/*.test.ts'],
   clearMocks: true,
   moduleFileExtensions: ['js', 'ts'],
-  collectCoverageFrom: ['src/**/*.ts', '!src/tests/**', '!src/data/migrations/**'],
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/tests/**',
+    '!src/data/migrations/**',
+    '!src/scratch/**',
+    '!src/types/**',
+    '!src/config/**',
+    '!src/utils/logger.ts',
+  ],
   coverageThreshold: {
     global: {
       branches: 70,
