@@ -8,6 +8,10 @@ interface AuthTokenPayload {
   email: string;
 }
 
+interface RefreshTokenPayload {
+  sub: string;
+}
+
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
@@ -18,8 +22,17 @@ declare global {
 }
 
 export function issueAccessToken(userId: string, email: string): string {
-  return jwt.sign({ sub: userId, email }, env.jwtSecret, { expiresIn: '7d' });
+  return jwt.sign({ sub: userId, email }, env.jwtSecret, { expiresIn: '1h' });
 }
+
+export function issueRefreshToken(userId: string): string {
+  return jwt.sign({ sub: userId }, env.jwtRefreshSecret, { expiresIn: '30d' });
+}
+
+export function verifyRefreshToken(token: string): RefreshTokenPayload {
+  return jwt.verify(token, env.jwtRefreshSecret) as RefreshTokenPayload;
+}
+
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   let token = '';

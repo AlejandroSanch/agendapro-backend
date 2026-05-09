@@ -1,5 +1,5 @@
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const localRequire = require;
 
 import { Umzug } from 'umzug';
 import mysql from 'mysql2/promise';
@@ -21,7 +21,7 @@ function buildUmzug(pool: mysql.Pool, dbName: string, migrationsPath: string) {
       glob: [migrationsPath, { cwd: __dirname }],
       resolve: ({ name, path: migrationPath, context }) => {
         // Soporte tanto para .js precompilado como TypeScript en desarrollo
-        const migration = require(migrationPath!);
+        const migration = localRequire(migrationPath!);
         return {
           name,
           up: async () => migration.up({ context }),

@@ -7,10 +7,11 @@ import {
   verifyUserEmailByToken,
 } from '../data/repositories/user.repository';
 import { verifyPasswordPlain } from '../data/utils';
-import { issueAccessToken } from '../middleware/auth';
+import { issueAccessToken, issueRefreshToken, verifyRefreshToken } from '../middleware/auth';
 import { env } from '../config/env';
 import {
   loginSchema,
+  refreshTokenSchema,
   registerSchema,
   resendVerificationSchema,
   verificationTokenSchema,
@@ -63,8 +64,11 @@ export const AuthController = {
     }
 
     const accessToken = issueAccessToken(user.id, user.email);
+    const refreshToken = issueRefreshToken(user.id);
+
     res.json({
       accessToken,
+      refreshToken,
       user: sanitizeUser(user),
     });
   }),
@@ -116,8 +120,11 @@ export const AuthController = {
     }
 
     const accessToken = issueAccessToken(user.id, user.email);
+    const refreshToken = issueRefreshToken(user.id);
+
     res.json({
       accessToken,
+      refreshToken,
       user: sanitizeUser(user),
     });
   }),
@@ -155,5 +162,28 @@ export const AuthController = {
   getMe: asyncWrapper(async (req: Request, res: Response) => {
     if (!req.user) throw new ApiError(401, 'No autorizado.');
     res.json({ user: req.user });
+  }),
+
+  refreshTokens: asyncWrapper(async (req: Request, res: Response) => {
+    const data = refreshTokenSchema.parse(req.body);
+
+    try {
+      const payload = verifyRefreshToken(data.refreshToken);
+      const user = await findUserById(payload.sub);
+
+      if (!user) {
+        throw new ApiError(401, 'Usuario no encontrado.');
+      }
+
+      const accessToken = issueAccessToken(user.id, user.email);
+      const refreshToken = issueRefreshToken(user.id);
+
+      res.json({
+        accessToken,
+        refreshToken,
+      });
+    } catch {
+      throw new ApiError(401, 'Refresh token inválido o expirado.');
+    }
   }),
 };

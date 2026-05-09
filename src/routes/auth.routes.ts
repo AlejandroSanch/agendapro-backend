@@ -8,5 +8,6 @@ export const authRouter = Router();
 authRouter.post('/login', authLimiter, AuthController.login);
 authRouter.post('/register', authLimiter, AuthController.register);
 authRouter.post('/verify-email', AuthController.verifyEmail);
+authRouter.post('/refresh', AuthController.refreshTokens);
 authRouter.post('/resend-verification', AuthController.resendVerification);
 authRouter.get('/me', requireAuth, AuthController.getMe);

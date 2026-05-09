@@ -1,9 +1,6 @@
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-
 import 'dotenv/config';
 import { env } from './config/env';
 import { initializeStore } from './data/schema';
@@ -94,6 +91,7 @@ async function bootstrap(): Promise<void> {
       logger.info({ signal }, 'Shutting down gracefully...');
       server.close(async () => {
         try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const { getControlPool } = require('./data/db');
           const pool = getControlPool();
           await pool.end();
