@@ -45,6 +45,7 @@ export const env = {
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:4000/api/integrations/google/callback',
   whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
   whatsappAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || '',
+  isProduction: process.env.NODE_ENV === 'production',
 };
 
 // Validaciones críticas de seguridad al arrancar

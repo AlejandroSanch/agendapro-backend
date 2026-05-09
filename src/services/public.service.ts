@@ -4,6 +4,7 @@ import { createSystemNotification } from '../data/repositories/notification.repo
 import { q } from '../data/utils';
 import { ApiError } from '../utils/ApiError';
 import { cleanDeletedName } from '../utils/sanitize';
+import { logger } from '../utils/logger';
 
 interface TenantMapRow extends RowDataPacket {
   tenant_db_name: string;
@@ -52,7 +53,9 @@ export const PublicService = {
             `INSERT IGNORE INTO appointment_tenant_map (appointment_id, tenant_db_name) VALUES (?, ?)`,
             [appointmentId, t.tenant_db_name]
           );
-        } catch { /* non-critical */ }
+        } catch (err) { 
+          logger.warn({ err, appointmentId, tenantDbName: t.tenant_db_name }, 'Failed to backfill appointment_tenant_map'); 
+        }
         return t.tenant_db_name;
       }
     }

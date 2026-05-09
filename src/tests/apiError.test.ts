@@ -10,11 +10,18 @@ describe('ApiError Custom Utility', () => {
   });
 
   it('debería instanciar propertys extendidas (details) cuando es dado', () => {
-    const error = new ApiError(400, 'Error de Validación', { minLength: 5 });
+    const error = new ApiError(400, 'Error de Validación', undefined, { minLength: 5 });
 
     expect(error.statusCode).toBe(400);
     expect(error.message).toBe('Error de Validación');
     expect(error.details).toEqual({ minLength: 5 });
+  });
+
+  it('debería almacenar un código de error personalizado', () => {
+    const error = new ApiError(403, 'Acceso Prohibido', 'FORBIDDEN_ACTION');
+
+    expect(error.code).toBe('FORBIDDEN_ACTION');
+    expect(error.statusCode).toBe(403);
   });
 
   it('debería heredar nativamente de Error de JS', () => {

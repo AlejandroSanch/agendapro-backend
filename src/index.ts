@@ -25,6 +25,8 @@ import cron from 'node-cron';
 import { runRemindersJob } from './jobs/appointmentReminders';
 import { globalLimiter } from './middleware/rate-limit';
 
+import { logger } from './utils/logger';
+
 const app = express();
 
 // Seguridad de Cabeceras HTTP
@@ -79,26 +81,26 @@ async function bootstrap(): Promise<void> {
     cron.schedule('0 * * * *', runRemindersJob); // Runs at minute 0 past every hour
 
     const server = app.listen(env.port, '0.0.0.0', () => {
-      console.log(`AgendaPro backend listening on all interfaces at port ${env.port}`);
-      console.log(`- Local: http://localhost:${env.port}`);
+      logger.info(`AgendaPro backend listening on all interfaces at port ${env.port}`);
+      logger.info(`- Local: http://localhost:${env.port}`);
     });
 
     // Graceful shutdown
     const shutdown = async (signal: string) => {
-      console.log(`\n🛑 ${signal} received. Shutting down gracefully...`);
+      logger.info({ signal }, 'Shutting down gracefully...');
       server.close(async () => {
         try {
           const { getControlPool } = require('./data/db');
           const pool = getControlPool();
           await pool.end();
-          console.log('✅ MySQL pool closed.');
+          logger.info('MySQL pool closed.');
         } catch { /* pool may not be initialized */ }
         process.exit(0);
       });
 
       // Force exit after 10s if graceful shutdown fails
       setTimeout(() => {
-        console.error('⚠️ Forced shutdown after timeout.');
+        logger.error('Forced shutdown after timeout.');
         process.exit(1);
       }, 10_000);
     };
@@ -106,8 +108,7 @@ async function bootstrap(): Promise<void> {
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
   } catch (error) {
-    console.error('No se pudo inicializar la base de datos MySQL.');
-    console.error(error);
+    logger.fatal(error, 'No se pudo inicializar la aplicación (Base de Datos).');
     process.exit(1);
   }
 }

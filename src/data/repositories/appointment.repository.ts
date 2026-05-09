@@ -10,6 +10,7 @@ import {
   splitMySqlDateTime,
 } from '../utils';
 import { getTenantDbNameByUserId } from './user.repository';
+import { logger } from '../../utils/logger';
 
 export interface AppointmentRecord {
   id: string;
@@ -199,7 +200,9 @@ export async function createAppointment(
         `INSERT IGNORE INTO appointment_tenant_map (appointment_id, tenant_db_name) VALUES (?, ?)`,
         [appointmentId, tenantDbName]
       );
-    } catch { /* Non-critical: public confirmation will fallback to scan */ }
+    } catch (err) { 
+      logger.warn({ err, appointmentId, tenantDbName }, 'Failed to register appointment in lookup table');
+    }
 
     return getAppointmentById(tenantDbName, appointmentId);
   } catch (error) {

@@ -2,6 +2,7 @@ import { google } from 'googleapis';
 import { env } from '../config/env';
 import { getControlPool } from '../data/db';
 import { RowDataPacket } from 'mysql2/promise';
+import { logger } from '../utils/logger';
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar.events'];
 
@@ -148,7 +149,12 @@ export const GoogleCalendarService = {
         });
       }
     } catch (error) {
-      console.error('[GoogleCalendarService] Error pushing event:', error);
+      logger.error({ 
+        err: error, 
+        userId, 
+        appointmentId: appointment.id,
+        action 
+      }, '[GoogleCalendarService] Error pushing event');
     }
   }
 };

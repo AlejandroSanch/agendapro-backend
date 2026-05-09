@@ -6,9 +6,10 @@ import { sendMail } from '../utils/mailer';
 import { WhatsAppService } from '../services/whatsapp.service';
 import { buildAppointmentReminderHtml, buildAppointmentReminderText } from '../templates/appointment-reminder.template';
 import { cleanDeletedName } from '../utils/sanitize';
+import { logger } from '../utils/logger';
 
 export async function runRemindersJob() {
-  console.log('⏰ Running 48h appointment reminders job (WhatsApp & Email)...');
+  logger.info('⏰ Running 48h appointment reminders job (WhatsApp & Email)...');
 
   try {
     const controlDb = getControlPool();
@@ -86,7 +87,9 @@ export async function runRemindersJob() {
                 const htmlBody = buildAppointmentReminderHtml(templateParams);
                 await sendMail(apt.customer_email, subject, textBody, htmlBody);
                 await logNotification(controlDb, tenantDbName, apt.customer_id, apt.appointment_id, 'email', subject, textBody, 'sent');
-              } catch (e) { console.error('Email failed', (e as Error).message); }
+              } catch (e) { 
+                logger.error({ err: e, tenant: tenantDbName, appointmentId: apt.appointment_id }, 'Email reminder failed');
+              }
             }
           }
 
@@ -108,24 +111,25 @@ export async function runRemindersJob() {
                 );
 
                 await logNotification(controlDb, tenantDbName, apt.customer_id, apt.appointment_id, 'whatsapp', 'Recordatorio WA Meta', 'Template: appointment_reminder', 'sent');
-                console.log(`✅ WhatsApp sent to ${customerName} (${cleanPhone})`);
+                logger.info({ tenant: tenantDbName, customer: customerName }, 'WhatsApp reminder sent');
               } catch (e: unknown) { 
                 const errMsg = e instanceof Error ? e.message : String(e);
-                console.error(`❌ WhatsApp failed for ${customerName}:`, errMsg); 
+                logger.error({ err: e, tenant: tenantDbName, customer: customerName }, 'WhatsApp reminder failed');
                 await logNotification(controlDb, tenantDbName, apt.customer_id, apt.appointment_id, 'whatsapp', 'Recordatorio WA Meta', errMsg, 'failed');
               }
             }
           }
         }
       } catch (tenantErr) {
-        console.error(`Error processing tenant ${tenantDbName}:`, tenantErr);
+        logger.error({ err: tenantErr, tenant: tenantDbName }, 'Error processing tenant in reminders job');
       }
     }
-    console.log('✅ Reminders job finished.');
+    logger.info('✅ Reminders job finished.');
   } catch (error) {
-    console.error('❌ Reminders job error:', error);
+    logger.error(error, '❌ Reminders job failed critically');
   }
 }
+
 
 async function notificationExists(db: Pool, tenant: string, aptId: string, channel: string): Promise<boolean> {
   const [rows] = await db.query<RowDataPacket[]>(

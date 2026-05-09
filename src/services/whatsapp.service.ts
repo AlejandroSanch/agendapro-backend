@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { env } from '../config/env';
+import { logger } from '../utils/logger';
 
 /**
  * Formatea una fecha YYYY-MM-DD a un formato amigable en español.
@@ -19,9 +20,6 @@ function formatWhatsAppDate(dateStr: string): string {
   }
 }
 
-/**
- * Servicio para interactuar con la WhatsApp Cloud API de Meta.
- */
 export const WhatsAppService = {
   /**
    * Envía un mensaje de plantilla para recordatorio de cita.
@@ -48,7 +46,11 @@ export const WhatsAppService = {
       });
       return response.data;
     } catch (error: any) {
-      console.error('Error enviando recordatorio WhatsApp:', error.response?.data || error.message);
+      logger.error({ 
+        err: error.response?.data || error.message,
+        to,
+        customerName 
+      }, 'Error enviando recordatorio WhatsApp');
       throw error;
     }
   },
@@ -76,9 +78,13 @@ export const WhatsAppService = {
           'Content-Type': 'application/json'
         }
       });
-      console.log(`✨ Confirmación real enviada a ${customerName}`);
+      logger.info({ customerName, to }, 'Confirmación real enviada vía WhatsApp');
     } catch (error: any) {
-      console.error('Error enviando confirmación WhatsApp:', error.response?.data || error.message);
+      logger.error({ 
+        err: error.response?.data || error.message,
+        to,
+        customerName 
+      }, 'Error enviando confirmación WhatsApp');
     }
   }
 };
