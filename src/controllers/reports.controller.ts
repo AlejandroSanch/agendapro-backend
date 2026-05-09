@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { RowDataPacket } from 'mysql2/promise';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
+import { getAuthUser } from '../utils/request';
 import { getControlPool } from '../data/db';
 import { q } from '../data/utils';
 import { getTenantDbNameByUserId } from '../data/repositories/user.repository';
@@ -44,9 +45,9 @@ interface StaffRankingRow extends RowDataPacket {
 }
 
 export const getStats = asyncWrapper(async (req: Request, res: Response) => {
-  if (!req.user) throw new ApiError(401, 'No autorizado.');
+  const user = getAuthUser(req);
 
-  const tenantDbName = await getTenantDbNameByUserId(req.user.id);
+  const tenantDbName = await getTenantDbNameByUserId(user.id);
   if (!tenantDbName) throw new ApiError(404, 'Tenant no encontrado.');
 
   const db = getControlPool();

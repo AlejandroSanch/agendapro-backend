@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
+import { getAuthUser } from '../utils/request';
 import { listInventoryLogs, adjustStock } from '../data/repositories/inventory.repository';
 import { z } from 'zod';
 
@@ -14,16 +15,16 @@ const createMovementSchema = z.object({
 
 export const InventoryController = {
   listLogs: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
-    const logs = await listInventoryLogs(req.user.id);
+    const user = getAuthUser(req);
+    const logs = await listInventoryLogs(user.id);
     res.json({ logs });
   }),
 
   createMovement: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
     const data = createMovementSchema.parse(req.body);
     
-    const result = await adjustStock(req.user.id, data);
+    const result = await adjustStock(user.id, data);
     if (!result) throw new ApiError(404, 'Producto no encontrado.');
     
     res.status(201).json({ log: result });

@@ -9,6 +9,7 @@ import {
 } from '../data/repositories/customer.repository';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
+import { getAuthUser } from '../utils/request';
 import {
   createCustomerSchema,
   customerIdParamSchema,
@@ -17,23 +18,23 @@ import {
 
 export const CustomersController = {
   list: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
-    const customers = await listCustomers(req.user.id);
+    const user = getAuthUser(req);
+    const customers = await listCustomers(user.id);
     res.json({ customers });
   }),
 
   getById: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
     const { id } = customerIdParamSchema.parse(req.params);
-    const customer = await getCustomerById(req.user.id, id);
+    const customer = await getCustomerById(user.id, id);
     if (!customer) throw new ApiError(404, 'Cliente no encontrado.');
     res.json({ customer });
   }),
 
   create: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
     const data = createCustomerSchema.parse(req.body);
-    const customer = await createCustomer(req.user.id, {
+    const customer = await createCustomer(user.id, {
       nombre: data.nombre,
       telefono: data.telefono,
       email: data.email,
@@ -46,26 +47,26 @@ export const CustomersController = {
   }),
 
   update: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
     const { id } = customerIdParamSchema.parse(req.params);
     const data = updateCustomerSchema.parse(req.body);
-    const customer = await updateCustomer(req.user.id, id, data);
+    const customer = await updateCustomer(user.id, id, data);
     if (!customer) throw new ApiError(404, 'Cliente no encontrado.');
     res.json({ customer });
   }),
 
   toggleActive: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
     const { id } = customerIdParamSchema.parse(req.params);
-    const customer = await toggleCustomerActive(req.user.id, id);
+    const customer = await toggleCustomerActive(user.id, id);
     if (!customer) throw new ApiError(404, 'Cliente no encontrado.');
     res.json({ customer });
   }),
 
   delete: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
     const { id } = customerIdParamSchema.parse(req.params);
-    const result = await deleteCustomer(req.user.id, id);
+    const result = await deleteCustomer(user.id, id);
     if (!result.deleted && !result.deactivated) throw new ApiError(404, 'Cliente no encontrado.');
     res.json({ deleted: result.deleted, deactivated: result.deactivated });
   }),

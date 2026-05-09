@@ -10,6 +10,7 @@ import {
 import { createProductSchema, createProductBulkSchema, productIdParamSchema, updateProductSchema } from '../validators/products.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
+import { getAuthUser } from '../utils/request';
 
 function toApiProduct(product: ProductRecord) {
   return {
@@ -29,14 +30,14 @@ function toApiProduct(product: ProductRecord) {
 
 export const ProductsController = {
   list: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
     
-    const products = await listProducts(req.user.id);
+    const products = await listProducts(user.id);
     res.json({ products: products.map(toApiProduct) });
   }),
 
   create: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
 
     const data = createProductSchema.parse(req.body);
     
@@ -53,13 +54,13 @@ export const ProductsController = {
       categoryId: data.categoriaId,
     };
 
-    const created = await createProduct(req.user.id, payload);
+    const created = await createProduct(user.id, payload);
     if (!created) throw new ApiError(404, 'Usuario no encontrado.');
     res.status(201).json({ product: toApiProduct(created) });
   }),
 
   update: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
 
     const params = productIdParamSchema.parse(req.params);
     const data = updateProductSchema.parse(req.body);
@@ -76,13 +77,13 @@ export const ProductsController = {
     if (data.proveedorId !== undefined) payload.supplierId = data.proveedorId;
     if (data.categoriaId !== undefined) payload.categoryId = data.categoriaId;
 
-    const updated = await updateProduct(req.user.id, params.id, payload);
+    const updated = await updateProduct(user.id, params.id, payload);
     if (!updated) throw new ApiError(404, 'Producto no encontrado.');
     res.json({ product: toApiProduct(updated) });
   }),
 
   createBulk: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
 
     const items = createProductBulkSchema.parse(req.body);
 
@@ -99,13 +100,13 @@ export const ProductsController = {
       categoryId: data.categoriaId,
     }));
 
-    const count = await createProductsBulk(req.user.id, inputs);
+    const count = await createProductsBulk(user.id, inputs);
     res.status(201).json({ message: 'Productos creados exitosamente', count });
   }),
   delete: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
     const params = productIdParamSchema.parse(req.params);
-    const success = await deleteProduct(req.user.id, params.id);
+    const success = await deleteProduct(user.id, params.id);
     if (!success) throw new ApiError(404, 'Producto no encontrado.');
     res.json({ message: 'Producto eliminado correctamente.' });
   }),

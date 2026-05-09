@@ -18,6 +18,8 @@ import { SseManager } from '../utils/sse.manager';
 import { GoogleCalendarService } from '../services/google-calendar.service';
 import { WhatsAppService } from '../services/whatsapp.service';
 import { AppointmentService } from '../services/appointment.service';
+import { cleanDeletedName } from '../utils/sanitize';
+import { getAuthUser } from '../utils/request';
 
 // ── Status mapping ───────────────────────────────────────────────────────────
 
@@ -45,20 +47,14 @@ function toApiAppointment(appointment: any) {
     id: appointment.id,
     clienteNombre: appointment.customerName,
     clienteTelefono: appointment.customerPhone,
-    servicio: (() => {
-      const original = appointment.serviceName || '';
-      return original.replace(/^\[BORRADO\]\s+/i, '').replace(/\s+\(\d+\)$/, '');
-    })(),
+    servicio: cleanDeletedName(appointment.serviceName || ''),
     duracionMin: appointment.durationMin,
     fecha: appointment.date,
     hora: appointment.time,
     precio: appointment.priceCents / 100,
     notas: appointment.notes,
     estado: statusFromDb[appointment.status as AppointmentStatusDb],
-    trabajador: (() => {
-      const original = appointment.trabajador || '';
-      return original.replace(/^\[BORRADO\]\s+/i, '').replace(/\s*\(\d+\)/, '').trim();
-    })(),
+    trabajador: cleanDeletedName(appointment.trabajador || ''),
   };
 }
 
@@ -66,7 +62,7 @@ function toApiAppointment(appointment: any) {
 
 export const AppointmentsController = {
   stream: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -76,14 +72,14 @@ export const AppointmentsController = {
     // Send initial connection successful message
     res.write('data: {"status": "connected"}\n\n');
 
-    SseManager.addClient(req.user.id, res);
+    SseManager.addClient(user.id, res);
   }),
 
   list: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
     
     const query = dateRangeQuerySchema.parse(req.query);
-    const appointments = await listAppointments(req.user.id, {
+    const appointments = await listAppointments(user.id, {
       dateFrom: query.dateFrom,
       dateTo: query.dateTo,
     });
@@ -92,12 +88,12 @@ export const AppointmentsController = {
   }),
 
   create: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
 
     const data = createAppointmentSchema.parse(req.body);
 
     // Validaciones de negocio delegadas al servicio
-    await AppointmentService.validateCreate(req.user.id, {
+    await AppointmentService.validateCreate(user.id, {
       fecha: data.fecha,
       hora: data.hora,
       duracionMin: data.duracionMin,
@@ -118,11 +114,11 @@ export const AppointmentsController = {
     };
 
     try {
-      const appointment = await createAppointment(req.user.id, payload);
+      const appointment = await createAppointment(user.id, payload);
       if (!appointment) throw new ApiError(500, 'No se pudo crear la cita.');
       
       const apiAppointment = toApiAppointment(appointment);
-      SseManager.broadcast(req.user.id, 'appointments_updated', { action: 'create', appointment: apiAppointment });
+      SseManager.broadcast(user.id, 'appointments_updated', { action: 'create', appointment: apiAppointment });
       
       // Enviar confirmación por WhatsApp si hay teléfono
       if (apiAppointment.clienteTelefono) {
@@ -139,7 +135,7 @@ export const AppointmentsController = {
       }
 
       // Sincronizar asincrónicamente con Google Calendar
-      GoogleCalendarService.pushEvent(req.user.id, apiAppointment as any, 'create').catch(console.error);
+      GoogleCalendarService.pushEvent(user.id, apiAppointment as any, 'create').catch(console.error);
 
       res.status(201).json({ appointment: apiAppointment });
     } catch (error) {
@@ -151,7 +147,7 @@ export const AppointmentsController = {
   }),
 
   update: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
 
     const params = appointmentIdParamSchema.parse(req.params);
     const data = updateAppointmentSchema.parse(req.body);
@@ -169,7 +165,7 @@ export const AppointmentsController = {
     if (data.trabajador !== undefined) payload.trabajador = data.trabajador;
 
     // Obtener la cita actual para combinar los datos y poder validarla
-    const currentApt = await findAppointmentById(req.user.id, params.id);
+    const currentApt = await findAppointmentById(user.id, params.id);
     if (!currentApt) throw new ApiError(404, 'Cita no encontrada.');
 
     const mergedDate = data.fecha ?? currentApt.date;
@@ -178,7 +174,7 @@ export const AppointmentsController = {
     const mergedTrabajador = data.trabajador ?? currentApt.trabajador;
 
     // Validaciones de negocio delegadas al servicio
-    await AppointmentService.validateUpdate(req.user.id, {
+    await AppointmentService.validateUpdate(user.id, {
       fecha: mergedDate,
       hora: mergedTime,
       duracionMin: mergedDuration,
@@ -186,14 +182,14 @@ export const AppointmentsController = {
     });
 
     try {
-      const appointment = await updateAppointment(req.user.id, params.id, payload);
+      const appointment = await updateAppointment(user.id, params.id, payload);
       if (!appointment) throw new ApiError(404, 'Cita no encontrada.');
       
       const apiAppointment = toApiAppointment(appointment);
-      SseManager.broadcast(req.user.id, 'appointments_updated', { action: 'update', appointment: apiAppointment });
+      SseManager.broadcast(user.id, 'appointments_updated', { action: 'update', appointment: apiAppointment });
       
       const googleAction = apiAppointment.estado === 'cancelada' ? 'delete' : 'update';
-      GoogleCalendarService.pushEvent(req.user.id, apiAppointment as any, googleAction).catch(console.error);
+      GoogleCalendarService.pushEvent(user.id, apiAppointment as any, googleAction).catch(console.error);
 
       res.json({ appointment: apiAppointment });
     } catch (error) {

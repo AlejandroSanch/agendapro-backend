@@ -62,7 +62,6 @@ export function isPasswordHash(value: string): boolean {
 }
 
 export function hashPassword(password: string): string {
-  if (env.storePlaintextPasswords) return password;
   return hashSync(password, SALT_ROUNDS);
 }
 

@@ -10,11 +10,13 @@ import {
 import { createServiceSchema, serviceIdParamSchema, updateServiceSchema } from '../validators/services.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
+import { cleanDeletedName } from '../utils/sanitize';
+import { getAuthUser } from '../utils/request';
 
 function toApiService(service: ServiceRecord) {
   return {
     id: service.id,
-    nombre: service.name.replace(/^\[BORRADO\] /, '').replace(/ \(\d{6}\)$/, ''),
+    nombre: cleanDeletedName(service.name),
     categoria: service.category,
     categoriaId: service.categoryId,
     duracionMin: service.durationMin,
@@ -39,14 +41,14 @@ function isServiceInUseError(error: unknown): boolean {
 
 export const ServicesController = {
   list: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
     
-    const services = await listServices(req.user.id);
+    const services = await listServices(user.id);
     res.json({ services: services.map(toApiService) });
   }),
 
   create: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
 
     const data = createServiceSchema.parse(req.body);
     
@@ -61,7 +63,7 @@ export const ServicesController = {
     };
 
     try {
-      const created = await createService(req.user.id, payload);
+      const created = await createService(user.id, payload);
       if (!created) throw new ApiError(404, 'Usuario no encontrado.');
       res.status(201).json({ service: toApiService(created) });
     } catch (error) {
@@ -71,7 +73,7 @@ export const ServicesController = {
   }),
 
   update: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
 
     const params = serviceIdParamSchema.parse(req.params);
     const data = updateServiceSchema.parse(req.body);
@@ -86,7 +88,7 @@ export const ServicesController = {
     if (data.orden !== undefined) payload.displayOrder = data.orden;
 
     try {
-      const updated = await updateService(req.user.id, params.id, payload);
+      const updated = await updateService(user.id, params.id, payload);
       if (!updated) throw new ApiError(404, 'Servicio no encontrado.');
       res.json({ service: toApiService(updated) });
     } catch (error) {
@@ -96,19 +98,19 @@ export const ServicesController = {
   }),
 
   delete: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
 
     const params = serviceIdParamSchema.parse(req.params);
 
     try {
       // 1. Verificar si tiene citas activas (programadas o confirmadas)
-      const hasActive = await hasActiveAppointments(req.user.id, params.id);
+      const hasActive = await hasActiveAppointments(user.id, params.id);
       if (hasActive) {
         throw new ApiError(409, 'No se puede eliminar: el servicio tiene citas próximas programadas. Por favor cámbialas o cancélalas primero.');
       }
 
       // 2. Realizar borrado lógico
-      const deleted = await deleteService(req.user.id, params.id);
+      const deleted = await deleteService(user.id, params.id);
       if (!deleted) throw new ApiError(404, 'Servicio no encontrado o ya eliminado.');
       
       res.json({ ok: true });

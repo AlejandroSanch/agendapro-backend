@@ -1,17 +1,18 @@
 import { Request, Response } from 'express';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
+import { getAuthUser } from '../utils/request';
 import { GoogleCalendarService } from '../services/google-calendar.service';
 import { env } from '../config/env';
 import { getControlPool } from '../data/db';
 
 export const IntegrationsController = {
   getGoogleAuthUrl: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
     if (!env.googleClientId) {
       throw new ApiError(500, 'Google Calendar Integration no está configurada en el servidor.');
     }
-    const url = GoogleCalendarService.getAuthUrl(req.user.id);
+    const url = GoogleCalendarService.getAuthUrl(user.id);
     res.json({ url });
   }),
 
@@ -30,24 +31,24 @@ export const IntegrationsController = {
   }),
 
   getStatus: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
     
     const db = getControlPool();
     const [rows] = await db.query(
       `SELECT provider, expires_at FROM tenant_integrations WHERE user_id = ?`,
-      [req.user.id]
+      [user.id]
     );
 
     res.json({ integrations: rows });
   }),
 
   disconnectGoogle: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
     
     const db = getControlPool();
     await db.query(
       `DELETE FROM tenant_integrations WHERE user_id = ? AND provider = 'google_calendar'`,
-      [req.user.id]
+      [user.id]
     );
 
     res.json({ success: true, message: 'Integración desconectada correctamente.' });

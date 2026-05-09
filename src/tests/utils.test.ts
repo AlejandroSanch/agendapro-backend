@@ -2,7 +2,6 @@ import { hashPassword, verifyPasswordPlain, tenantDbNameFromUserId } from '../da
 import { env } from '../config/env';
 
 // Forzar env para pruebas predecibles
-env.storePlaintextPasswords = false;
 env.mysqlTenantDbPrefix = 'ap_tenant_';
 
 describe('Data Utils (Criptografía y Formateo)', () => {

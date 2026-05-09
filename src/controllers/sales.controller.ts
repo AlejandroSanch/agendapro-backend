@@ -3,10 +3,11 @@ import { createSale } from '../data/repositories/sale.repository';
 import { checkoutSchema } from '../validators/sales.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
+import { getAuthUser } from '../utils/request';
 
 export const SalesController = {
   checkout: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
 
     const data = checkoutSchema.parse(req.body);
     
@@ -25,7 +26,7 @@ export const SalesController = {
       })),
     };
 
-    const saleId = await createSale(req.user.id, payload);
+    const saleId = await createSale(user.id, payload);
     if (!saleId) throw new ApiError(500, 'No se pudo procesar la venta.');
     
     res.status(201).json({ 

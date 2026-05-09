@@ -14,23 +14,24 @@ import {
 } from '../validators/categories.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
+import { getAuthUser } from '../utils/request';
 
 export const CategoriesController = {
   list: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
 
     const query = listCategoryQuerySchema.parse(req.query);
-    const categories = await listCategories(req.user.id, query.type);
+    const categories = await listCategories(user.id, query.type);
     res.json({ categories });
   }),
 
   create: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
 
     const data = createCategorySchema.parse(req.body);
 
     try {
-      const created = await createCategory(req.user.id, {
+      const created = await createCategory(user.id, {
         name: data.nombre,
         description: data.descripcion,
         type: data.type,
@@ -47,7 +48,7 @@ export const CategoriesController = {
   }),
 
   update: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
 
     const params = categoryIdParamSchema.parse(req.params);
     const data = updateCategorySchema.parse(req.body);
@@ -57,19 +58,19 @@ export const CategoriesController = {
     if (data.descripcion !== undefined) payload.description = data.descripcion;
     if (data.type !== undefined) payload.type = data.type;
 
-    const updated = await updateCategory(req.user.id, params.id, payload);
+    const updated = await updateCategory(user.id, params.id, payload);
 
     if (!updated) throw new ApiError(404, 'Categoria no encontrada.');
     res.json({ category: updated });
   }),
 
   delete: asyncWrapper(async (req: Request, res: Response) => {
-    if (!req.user) throw new ApiError(401, 'No autorizado.');
+    const user = getAuthUser(req);
 
     const params = categoryIdParamSchema.parse(req.params);
 
     try {
-      const deleted = await deleteCategory(req.user.id, params.id);
+      const deleted = await deleteCategory(user.id, params.id);
       if (!deleted) throw new ApiError(404, 'Categoria no encontrada.');
       res.json({ ok: true });
     } catch (error) {

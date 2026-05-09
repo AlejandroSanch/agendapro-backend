@@ -5,6 +5,7 @@ import { env } from '../config/env';
 import { sendMail } from '../utils/mailer';
 import { WhatsAppService } from '../services/whatsapp.service';
 import { buildAppointmentReminderHtml, buildAppointmentReminderText } from '../templates/appointment-reminder.template';
+import { cleanDeletedName } from '../utils/sanitize';
 
 export async function runRemindersJob() {
   console.log('⏰ Running 48h appointment reminders job (WhatsApp & Email)...');
@@ -60,7 +61,7 @@ export async function runRemindersJob() {
           const dateFormatted = startDate.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
           const timeFormatted = startDate.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
 
-          const serviceName = (apt.service_name || 'Servicio Profesional').replace(/^\[BORRADO\] /, '').replace(/ \(\d{6}\)$/, '');
+          const serviceName = cleanDeletedName(apt.service_name || 'Servicio Profesional');
 
           const templateParams = {
             customerName,

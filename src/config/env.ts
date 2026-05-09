@@ -32,7 +32,7 @@ export const env = {
   mysqlTenantDbPrefix: (process.env.MYSQL_TENANT_DB_PREFIX || 'agendapro_tenant_').trim(),
   mysqlConnectionLimit: parsePort(process.env.MYSQL_CONNECTION_LIMIT, 10),
   mysqlAutoMigrateFromSqlite: parseBool(process.env.MYSQL_AUTO_MIGRATE_FROM_SQLITE, true),
-  storePlaintextPasswords: parseBool(process.env.STORE_PLAINTEXT_PASSWORDS, false),
+
   sqliteControlDbPath: (process.env.SQLITE_CONTROL_DB_PATH || 'storage/control.db').trim(),
   sqliteTenantsDbDir: (process.env.SQLITE_TENANTS_DB_DIR || 'storage/tenants').trim(),
   smtpHost: process.env.SMTP_HOST || 'smtp.ethereal.email',
@@ -53,8 +53,5 @@ if (process.env.NODE_ENV === 'production') {
     console.error('❌ FATAL: JWT_SECRET no está configurado. No se puede iniciar en producción sin un secret seguro.');
     process.exit(1);
   }
-  if (env.storePlaintextPasswords) {
-    console.error('❌ FATAL: STORE_PLAINTEXT_PASSWORDS está activado en producción. Esto es un riesgo de seguridad crítico.');
-    process.exit(1);
-  }
+
 }
