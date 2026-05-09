@@ -172,20 +172,37 @@ async function ensureCustomersSchema(tenantDbName: string): Promise<void> {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export async function listCustomers(userId: string): Promise<CustomerRecord[]> {
+export async function listCustomers(
+  userId: string,
+  pagination?: { page?: number; limit?: number }
+): Promise<{ data: CustomerRecord[]; total: number }> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
-  if (!tenantDbName) return [];
+  if (!tenantDbName) return { data: [], total: 0 };
 
   await ensureCustomersSchema(tenantDbName);
 
   const db = getControlPool();
+
+  // 1. Get total count
+  const [countRows] = await db.query<RowDataPacket[]>(
+    `SELECT COUNT(*) as total FROM ${q(tenantDbName)}.customers`
+  );
+  const total = Number(countRows[0]?.total ?? 0);
+
+  // 2. Get paginated data
+  const limit = Math.min(pagination?.limit || 50, 200);
+  const page = Math.max(pagination?.page || 1, 1);
+  const offset = (page - 1) * limit;
+
   const [rows] = await db.query<CustomerRow[]>(
     `
       SELECT id, first_name, last_name, phone, email, birth_date, sex, notes, is_active,
              DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
       FROM ${q(tenantDbName)}.customers
       ORDER BY first_name ASC, last_name ASC
-    `
+      LIMIT ? OFFSET ?
+    `,
+    [limit, offset]
   );
 
   const records: CustomerRecord[] = [];
@@ -193,7 +210,11 @@ export async function listCustomers(userId: string): Promise<CustomerRecord[]> {
     const citas = await fetchCitasForCustomer(tenantDbName, row.id);
     records.push(toCustomerRecord(row, citas));
   }
-  return records;
+
+  return {
+    data: records,
+    total
+  };
 }
 
 export async function getCustomerById(

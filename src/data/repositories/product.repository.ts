@@ -46,20 +46,40 @@ interface TenantProductRow extends RowDataPacket {
   is_active: number;
 }
 
-export async function listProducts(userId: string): Promise<ProductRecord[]> {
+export async function listProducts(
+  userId: string,
+  pagination?: { page?: number; limit?: number }
+): Promise<{ data: ProductRecord[]; total: number }> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
-  if (!tenantDbName) return [];
+  if (!tenantDbName) return { data: [], total: 0 };
 
   const db = getControlPool();
+
+  // 1. Get total count
+  const [countRows] = await db.query<RowDataPacket[]>(
+    `SELECT COUNT(*) as total FROM ${q(tenantDbName)}.products`
+  );
+  const total = Number(countRows[0]?.total ?? 0);
+
+  // 2. Get paginated data
+  const limit = Math.min(pagination?.limit || 50, 200);
+  const page = Math.max(pagination?.page || 1, 1);
+  const offset = (page - 1) * limit;
+
   const [rows] = await db.query<TenantProductRow[]>(
     `
       SELECT id, supplier_id, category_id, sku, name, unit, price_cents, cost_cents, stock_quantity, reorder_alert_level, is_active
       FROM ${q(tenantDbName)}.products
       ORDER BY name ASC
-    `
+      LIMIT ? OFFSET ?
+    `,
+    [limit, offset]
   );
 
-  return rows.map(toProductRecord);
+  return {
+    data: rows.map(toProductRecord),
+    total
+  };
 }
 
 export async function createProduct(

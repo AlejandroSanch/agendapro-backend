@@ -24,33 +24,52 @@ export interface CreateInventoryLogInput {
   staffId?: string | null;
 }
 
-export async function listInventoryLogs(userId: string): Promise<InventoryLogRecord[]> {
+export async function listInventoryLogs(
+  userId: string,
+  pagination?: { page?: number; limit?: number }
+): Promise<{ data: InventoryLogRecord[]; total: number }> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
-  if (!tenantDbName) return [];
+  if (!tenantDbName) return { data: [], total: 0 };
 
   const db = getControlPool();
+
+  // 1. Get total count
+  const [countRows] = await db.query<RowDataPacket[]>(
+    `SELECT COUNT(*) as total FROM ${q(tenantDbName)}.inventory_logs`
+  );
+  const total = Number(countRows[0]?.total ?? 0);
+
+  // 2. Get paginated data
+  const limit = Math.min(pagination?.limit || 50, 200);
+  const page = Math.max(pagination?.page || 1, 1);
+  const offset = (page - 1) * limit;
+
   const [rows] = await db.query<RowDataPacket[]>(
     `
       SELECT l.*, p.name as product_name
       FROM ${q(tenantDbName)}.inventory_logs l
       JOIN ${q(tenantDbName)}.products p ON l.product_id = p.id
       ORDER BY l.created_at DESC
-      LIMIT 500
-    `
+      LIMIT ? OFFSET ?
+    `,
+    [limit, offset]
   );
 
-  return rows.map(row => ({
-    id: String(row.id),
-    productId: String(row.product_id),
-    productName: row.product_name,
-    type: row.type,
-    quantity: row.quantity,
-    stockBefore: row.stock_before,
-    stockAfter: row.stock_after,
-    notes: row.notes,
-    staffId: row.staff_id ? String(row.staff_id) : null,
-    createdAt: row.created_at,
-  }));
+  return {
+    data: rows.map(row => ({
+      id: String(row.id),
+      productId: String(row.product_id),
+      productName: row.product_name,
+      type: row.type,
+      quantity: row.quantity,
+      stockBefore: row.stock_before,
+      stockAfter: row.stock_after,
+      notes: row.notes,
+      staffId: row.staff_id ? String(row.staff_id) : null,
+      createdAt: row.created_at,
+    })),
+    total
+  };
 }
 
 export async function adjustStock(

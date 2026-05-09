@@ -43,11 +43,26 @@ interface MaxIdRow extends RowDataPacket {
   max_value: number | string | null;
 }
 
-export async function listServices(userId: string): Promise<ServiceRecord[]> {
+export async function listServices(
+  userId: string,
+  pagination?: { page?: number; limit?: number }
+): Promise<{ data: ServiceRecord[]; total: number }> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
-  if (!tenantDbName) return [];
+  if (!tenantDbName) return { data: [], total: 0 };
 
   const db = getControlPool();
+
+  // 1. Get total count
+  const [countRows] = await db.query<RowDataPacket[]>(
+    `SELECT COUNT(*) as total FROM ${q(tenantDbName)}.services WHERE deleted_at IS NULL`
+  );
+  const total = Number(countRows[0]?.total ?? 0);
+
+  // 2. Get paginated data
+  const limit = Math.min(pagination?.limit || 50, 200);
+  const page = Math.max(pagination?.page || 1, 1);
+  const offset = (page - 1) * limit;
+
   const [rows] = await db.query<TenantServiceRow[]>(
     `
       SELECT s.id, s.name, c.name AS category, s.category_id, s.description, s.duration_minutes, s.price_cents, s.display_order, s.is_active
@@ -55,10 +70,15 @@ export async function listServices(userId: string): Promise<ServiceRecord[]> {
       LEFT JOIN ${q(tenantDbName)}.categories c ON c.id = s.category_id
       WHERE s.deleted_at IS NULL
       ORDER BY s.display_order ASC, s.name ASC
-    `
+      LIMIT ? OFFSET ?
+    `,
+    [limit, offset]
   );
 
-  return rows.map(toServiceRecord);
+  return {
+    data: rows.map(toServiceRecord),
+    total
+  };
 }
 
 export async function createService(

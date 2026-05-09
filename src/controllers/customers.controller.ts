@@ -14,13 +14,25 @@ import {
   createCustomerSchema,
   customerIdParamSchema,
   updateCustomerSchema,
+  paginationQuerySchema,
 } from '../validators/customers.validators';
 
 export const CustomersController = {
   list: asyncWrapper(async (req: Request, res: Response) => {
     const user = getAuthUser(req);
-    const customers = await listCustomers(user.id);
-    res.json({ customers });
+    const query = paginationQuerySchema.parse(req.query);
+    const { data, total } = await listCustomers(user.id, {
+      page: query.page,
+      limit: query.limit,
+    });
+    res.json({ 
+      customers: data,
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total
+      }
+    });
   }),
 
   getById: asyncWrapper(async (req: Request, res: Response) => {

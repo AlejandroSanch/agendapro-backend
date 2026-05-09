@@ -1,4 +1,5 @@
 import { z } from 'zod';
+export { paginationQuerySchema } from './common.validators';
 
 export const serviceIdParamSchema = z.object({
   id: z.string().trim().min(1, 'ID de servicio inválido.')

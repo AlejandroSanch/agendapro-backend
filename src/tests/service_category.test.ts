@@ -31,6 +31,9 @@ describe('Service & Category Repositories', () => {
 
   describe('ServiceRepository', () => {
     it('debería listar servicios correctamente mapeando a ServiceRecord', async () => {
+      // 1. Count query mock
+      mockQuery.mockResolvedValueOnce([[{ total: 1 }]]);
+      // 2. Data query mock
       mockQuery.mockResolvedValueOnce([[
         { 
           id: '1', 
@@ -45,10 +48,11 @@ describe('Service & Category Repositories', () => {
         }
       ]]);
 
-      const services = await listServices(userId);
+      const { data, total } = await listServices(userId);
       
-      expect(services).toHaveLength(1);
-      expect(services[0]).toEqual({
+      expect(data).toHaveLength(1);
+      expect(total).toBe(1);
+      expect(data[0]).toEqual({
         id: '1',
         name: 'Corte de Cabello',
         category: 'Barbería',

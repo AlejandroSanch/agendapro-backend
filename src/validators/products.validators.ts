@@ -1,4 +1,5 @@
 import { z } from 'zod';
+export { paginationQuerySchema } from './common.validators';
 
 export const productIdParamSchema = z.object({
   id: z.string().min(1, 'ID de producto requerido'),

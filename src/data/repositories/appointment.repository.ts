@@ -60,10 +60,15 @@ interface IdRow extends RowDataPacket {
 
 export async function listAppointments(
   userId: string,
-  filters?: { dateFrom?: string; dateTo?: string }
-): Promise<AppointmentRecord[]> {
+  filters?: { 
+    dateFrom?: string; 
+    dateTo?: string;
+    page?: number;
+    limit?: number;
+  }
+): Promise<{ data: AppointmentRecord[]; total: number }> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
-  if (!tenantDbName) return [];
+  if (!tenantDbName) return { data: [], total: 0 };
 
   const db = getControlPool();
   const whereParts: string[] = [];
@@ -81,6 +86,18 @@ export async function listAppointments(
 
   const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
+  // 1. Get total count
+  const [countRows] = await db.query<RowDataPacket[]>(
+    `SELECT COUNT(*) as total FROM ${q(tenantDbName)}.appointments a ${whereClause}`,
+    params
+  );
+  const total = Number(countRows[0]?.total ?? 0);
+
+  // 2. Get paginated data
+  const limit = Math.min(filters?.limit || 50, 200);
+  const page = Math.max(filters?.page || 1, 1);
+  const offset = (page - 1) * limit;
+
   const [rows] = await db.query<AppointmentJoinedRow[]>(
     `
       SELECT
@@ -95,11 +112,15 @@ export async function listAppointments(
       LEFT JOIN ${q(tenantDbName)}.staff st ON st.id = aserv.staff_id
       ${whereClause}
       ORDER BY a.start_at ASC
+      LIMIT ? OFFSET ?
     `,
-    params
+    [...params, limit, offset]
   );
 
-  return rows.map(toAppointmentRecord);
+  return {
+    data: rows.map(toAppointmentRecord),
+    total
+  };
 }
 
 export async function findAppointmentById(

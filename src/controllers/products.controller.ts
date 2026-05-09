@@ -8,7 +8,7 @@ import {
   updateProduct,
   UpdateProductInput,
 } from '../data/repositories/product.repository';
-import { createProductSchema, createProductBulkSchema, productIdParamSchema, updateProductSchema } from '../validators/products.validators';
+import { createProductSchema, createProductBulkSchema, productIdParamSchema, updateProductSchema, paginationQuerySchema } from '../validators/products.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
 import { getAuthUser } from '../utils/request';
@@ -32,9 +32,19 @@ function toApiProduct(product: ProductRecord) {
 export const ProductsController = {
   list: asyncWrapper(async (req: Request, res: Response) => {
     const user = getAuthUser(req);
-    
-    const products = await listProducts(user.id);
-    res.json({ products: products.map(toApiProduct) });
+    const query = paginationQuerySchema.parse(req.query);
+    const { data, total } = await listProducts(user.id, {
+      page: query.page,
+      limit: query.limit,
+    });
+    res.json({ 
+      products: data.map(toApiProduct),
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total
+      }
+    });
   }),
 
   create: asyncWrapper(async (req: Request, res: Response) => {

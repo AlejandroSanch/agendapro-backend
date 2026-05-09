@@ -8,7 +8,7 @@ import {
   updateService,
   UpdateServiceInput,
 } from '../data/repositories/service.repository';
-import { createServiceSchema, serviceIdParamSchema, updateServiceSchema } from '../validators/services.validators';
+import { createServiceSchema, serviceIdParamSchema, updateServiceSchema, paginationQuerySchema } from '../validators/services.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
 import { cleanDeletedName } from '../utils/sanitize';
@@ -43,9 +43,19 @@ function isServiceInUseError(error: unknown): boolean {
 export const ServicesController = {
   list: asyncWrapper(async (req: Request, res: Response) => {
     const user = getAuthUser(req);
-    
-    const services = await listServices(user.id);
-    res.json({ services: services.map(toApiService) });
+    const query = paginationQuerySchema.parse(req.query);
+    const { data, total } = await listServices(user.id, {
+      page: query.page,
+      limit: query.limit,
+    });
+    res.json({ 
+      services: data.map(toApiService),
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total
+      }
+    });
   }),
 
   create: asyncWrapper(async (req: Request, res: Response) => {

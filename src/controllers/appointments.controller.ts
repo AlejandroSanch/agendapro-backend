@@ -80,12 +80,21 @@ export const AppointmentsController = {
     const user = getAuthUser(req);
     
     const query = dateRangeQuerySchema.parse(req.query);
-    const appointments = await listAppointments(user.id, {
+    const { data, total } = await listAppointments(user.id, {
       dateFrom: query.dateFrom,
       dateTo: query.dateTo,
+      page: query.page,
+      limit: query.limit,
     });
 
-    res.json({ appointments: appointments.map(toApiAppointment) });
+    res.json({ 
+      appointments: data.map(toApiAppointment),
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total
+      }
+    });
   }),
 
   create: asyncWrapper(async (req: Request, res: Response) => {

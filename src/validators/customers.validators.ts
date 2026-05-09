@@ -1,4 +1,5 @@
 import { z } from 'zod';
+export { paginationQuerySchema } from './common.validators';
 
 const sexos = ['masculino', 'femenino', 'otro', ''] as const;
 

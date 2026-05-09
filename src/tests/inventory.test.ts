@@ -20,6 +20,9 @@ describe('InventoryRepository', () => {
 
   describe('listInventoryLogs', () => {
     it('debería listar los logs de inventario mapeados correctamente', async () => {
+      // 1. Count query mock
+      mockQuery.mockResolvedValueOnce([[{ total: 1 }]]);
+      // 2. Data query mock
       mockQuery.mockResolvedValueOnce([[
         {
           id: 1,
@@ -35,10 +38,11 @@ describe('InventoryRepository', () => {
         }
       ]]);
 
-      const logs = await listInventoryLogs(userId);
+      const { data, total } = await listInventoryLogs(userId);
 
-      expect(logs).toHaveLength(1);
-      expect(logs[0]).toEqual(expect.objectContaining({
+      expect(data).toHaveLength(1);
+      expect(total).toBe(1);
+      expect(data[0]).toEqual(expect.objectContaining({
         id: '1',
         productName: 'Shampoo',
         quantity: 5,

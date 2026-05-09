@@ -91,21 +91,10 @@ async function ensureAllTenantSchemas(): Promise<void> {
  * Crea la base de datos para el tenant si no existe, y corre el motor dinámico de Umzug.
  */
 export async function ensureTenantSchema(tenantDbName: string): Promise<void> {
-  const adminPool = mysql.createPool({
-    host: env.mysqlHost,
-    port: env.mysqlPort,
-    user: env.mysqlUser,
-    password: env.mysqlPassword,
-    waitForConnections: true,
-    connectionLimit: 1,
-    queueLimit: 0,
-  });
+  const db = getControlPool();
+  
+  await db.query(`CREATE DATABASE IF NOT EXISTS ${q(tenantDbName)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
 
-  try {
-    await adminPool.query(`CREATE DATABASE IF NOT EXISTS ${q(tenantDbName)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-  } finally {
-    await adminPool.end();
-  }
 
   // Ahora que la BD existe físicamente en MySQL, inyectamos a Umzug
   const { migrator, pool } = getTenantMigrator(tenantDbName);

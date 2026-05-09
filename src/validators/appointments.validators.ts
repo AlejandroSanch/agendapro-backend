@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { paginationQuerySchema } from './common.validators';
 
 export const appointmentIdParamSchema = z.object({
   id: z.string().trim().min(1, 'ID de cita inválido.')
@@ -7,7 +8,7 @@ export const appointmentIdParamSchema = z.object({
 export const dateRangeQuerySchema = z.object({
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido. Usa YYYY-MM-DD.').optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido. Usa YYYY-MM-DD.').optional()
-});
+}).merge(paginationQuerySchema);
 
 const estadosValidos = ['pendiente', 'confirmada', 'completada', 'cancelada'] as const;
 
