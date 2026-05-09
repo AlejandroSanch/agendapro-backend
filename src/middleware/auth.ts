@@ -40,7 +40,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   if (authorization?.startsWith('Bearer ')) {
     token = authorization.slice('Bearer '.length).trim();
   } else if (req.query.token && typeof req.query.token === 'string') {
-    token = req.query.token;
+    // Phase 1.3: Only allow query token for SSE streams to avoid logging tokens in access logs
+    if (req.path.endsWith('/stream')) {
+      token = req.query.token;
+    }
   }
 
   if (!token) {
