@@ -13,3 +13,6 @@ email_preview.html
 
 # IDE
 .vscode/
+
+# Testing
+coverage/

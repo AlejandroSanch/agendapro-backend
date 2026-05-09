@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import {
   createUser,
   findUserByEmail,
+  findUserById,
   refreshEmailVerificationTokenByEmail,
   sanitizeUser,
   verifyUserEmailByToken,

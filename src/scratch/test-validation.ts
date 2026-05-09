@@ -55,7 +55,7 @@ async function testValidation() {
     console.log('\n3. Probando actualización de cita pasada a "completada" (debería funcionar)...');
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    const pastDateStr = yesterday.toISOString().split('T')[0];
+    const pastDateStr = yesterday.toISOString().split('T')[0]!;
     
     const pastAppt = await createAppointment(userId, {
       customerName: 'Test Past',

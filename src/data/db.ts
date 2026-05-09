@@ -43,3 +43,10 @@ export async function ensureControlDatabaseAndPool(): Promise<void> {
     dateStrings: true,
   });
 }
+
+export async function closeControlPool(): Promise<void> {
+  if (controlPool) {
+    await controlPool.end();
+    controlPool = null;
+  }
+}

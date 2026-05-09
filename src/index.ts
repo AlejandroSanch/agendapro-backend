@@ -28,7 +28,7 @@ import { globalLimiter } from './middleware/rate-limit';
 
 import { logger } from './utils/logger';
 
-const app = express();
+export const app = express();
 
 // Seguridad de Cabeceras HTTP
 app.use(helmet());
@@ -117,4 +117,6 @@ async function bootstrap(): Promise<void> {
   }
 }
 
-void bootstrap();
+if (require.main === module) {
+  void bootstrap();
+}
