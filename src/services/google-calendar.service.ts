@@ -1,4 +1,4 @@
-import { google } from 'googleapis';
+import { google, calendar_v3 } from 'googleapis';
 import { env } from '../config/env';
 import { getControlPool } from '../data/db';
 import { RowDataPacket } from 'mysql2/promise';
@@ -122,7 +122,7 @@ export const GoogleCalendarService = {
       const startDate = new Date(`${appointment.fecha}T${appointment.hora}:00`);
       const endDate = new Date(startDate.getTime() + appointment.duracionMin * 60000);
 
-      const event = {
+      const event: calendar_v3.Schema$Event = {
         id: eventId,
         summary: `Cita AgendaPro: ${appointment.servicio}`,
         description: `Cliente: ${appointment.clienteNombre}\nTeléfono: ${appointment.clienteTelefono}\nNotas: ${appointment.notas || 'N/A'}\nEspecialista: ${appointment.trabajador || 'Sin asignar'}`,

@@ -18,9 +18,14 @@ export const SseManager = {
     // Remove client when connection is closed
     res.on('close', () => {
       clearInterval(interval);
-      clients[businessId] = clients[businessId].filter((client) => client !== res);
-      if (clients[businessId].length === 0) {
-        delete clients[businessId];
+      const existing = clients[businessId];
+      if (existing) {
+        const updated = existing.filter((client) => client !== res);
+        if (updated.length === 0) {
+          delete clients[businessId];
+        } else {
+          clients[businessId] = updated;
+        }
       }
     });
   },

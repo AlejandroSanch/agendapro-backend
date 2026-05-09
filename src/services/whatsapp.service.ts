@@ -8,7 +8,15 @@ import { logger } from '../utils/logger';
  */
 function formatWhatsAppDate(dateStr: string): string {
   try {
-    const [year, month, day] = dateStr.split('-').map(Number);
+    const parts = dateStr.split('-').map(Number);
+    const year = parts[0];
+    const month = parts[1];
+    const day = parts[2];
+    
+    if (year === undefined || month === undefined || day === undefined) {
+      return dateStr;
+    }
+    
     const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('es-ES', { 
       weekday: 'long', 

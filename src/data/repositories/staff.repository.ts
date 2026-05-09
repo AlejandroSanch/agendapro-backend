@@ -127,11 +127,12 @@ export async function listStaff(userId: string): Promise<StaffRecord[]> {
   );
 
   const results: StaffRecord[] = [];
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
+  let i = 0;
+  for (const row of rows) {
     const especialidades = await getStaffEspecialidades(tenantDbName, row.id);
     const horario = await getStaffSchedule(tenantDbName, row.id);
     results.push(toStaffRecord(row, especialidades, horario, i));
+    i++;
   }
 
   return results;
@@ -506,10 +507,11 @@ async function countStaff(tenantDbName: string): Promise<number> {
 
 function splitName(fullName: string): { firstName: string; lastName: string } {
   const parts = String(fullName || '').trim().split(/\s+/);
+  const p0 = parts[0] || '';
   if (parts.length <= 1) {
-    return { firstName: parts[0] || '', lastName: '' };
+    return { firstName: p0, lastName: '' };
   }
-  return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+  return { firstName: p0, lastName: parts.slice(1).join(' ') };
 }
 
 function computeInitials(firstName: string, lastName: string): string {
@@ -547,6 +549,6 @@ function toStaffRecord(
     descansoHasta: row.break_end ? formatTimeToHHMM(row.break_end) : null,
     activo: row.is_active === 1,
     initials: computeInitials(row.first_name, row.last_name),
-    color: STAFF_COLORS[Math.abs(colorIndex) % STAFF_COLORS.length],
+    color: STAFF_COLORS[Math.abs(colorIndex) % STAFF_COLORS.length] || '#CCCCCC',
   };
 }

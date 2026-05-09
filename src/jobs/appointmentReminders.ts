@@ -131,7 +131,7 @@ export async function runRemindersJob() {
 }
 
 
-async function notificationExists(db: Pool, tenant: string, aptId: string, channel: string): Promise<boolean> {
+async function notificationExists(db: Pool, tenant: string, aptId: string, channel: 'email' | 'whatsapp'): Promise<boolean> {
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT 1 FROM ${q(tenant)}.notifications_log WHERE appointment_id = ? AND channel = ? AND status = 'sent' LIMIT 1`,
     [aptId, channel]
@@ -139,7 +139,16 @@ async function notificationExists(db: Pool, tenant: string, aptId: string, chann
   return rows.length > 0;
 }
 
-async function logNotification(db: Pool, tenant: string, custId: string, aptId: string, channel: string, subject: string, body: string, status: string) {
+async function logNotification(
+  db: Pool, 
+  tenant: string, 
+  custId: string, 
+  aptId: string, 
+  channel: 'email' | 'whatsapp', 
+  subject: string, 
+  body: string, 
+  status: 'sent' | 'failed'
+) {
   await db.query(
     `INSERT INTO ${q(tenant)}.notifications_log (customer_id, appointment_id, channel, subject, body, status, sent_at)
      VALUES (?, ?, ?, ?, ?, ?, NOW())`,

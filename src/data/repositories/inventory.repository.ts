@@ -86,9 +86,10 @@ export async function adjustStock(
     `SELECT stock_quantity FROM ${q(tenantDbName)}.products WHERE id = ?`,
     [input.productId]
   );
-  if (products.length === 0) return null;
+  const firstProduct = products[0];
+  if (!firstProduct) return null;
   
-  const stockBefore = products[0].stock_quantity;
+  const stockBefore = firstProduct.stock_quantity;
   let stockAfter = stockBefore;
 
   if (input.type === 'in') {

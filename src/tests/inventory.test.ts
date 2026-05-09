@@ -42,7 +42,7 @@ describe('InventoryRepository', () => {
 
       expect(data).toHaveLength(1);
       expect(total).toBe(1);
-      expect(data[0]).toEqual(expect.objectContaining({
+      expect(data[0]!).toEqual(expect.objectContaining({
         id: '1',
         productName: 'Shampoo',
         quantity: 5,

@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { z } from 'zod';
 import { asyncWrapper } from '../utils/asyncWrapper';
 import { ApiError } from '../utils/ApiError';
 import { getAuthUser } from '../utils/request';
@@ -9,6 +10,10 @@ import {
   markAllNotificationsAsRead,
   deleteNotification
 } from '../data/repositories/notification.repository';
+
+const idParamSchema = z.object({
+  id: z.string().min(1)
+});
 
 export const NotificationsController = {
   /**
@@ -27,7 +32,7 @@ export const NotificationsController = {
    */
   markAsRead: asyncWrapper(async (req: Request, res: Response) => {
     const user = getAuthUser(req);
-    const { id } = req.params;
+    const { id } = idParamSchema.parse(req.params);
 
     const tenantDb = tenantDbNameFromUserId(user.id);
     const success = await markNotificationAsRead(tenantDb, id);
@@ -52,7 +57,7 @@ export const NotificationsController = {
    */
   delete: asyncWrapper(async (req: Request, res: Response) => {
     const user = getAuthUser(req);
-    const { id } = req.params;
+    const { id } = idParamSchema.parse(req.params);
 
     const tenantDb = tenantDbNameFromUserId(user.id);
     const success = await deleteNotification(tenantDb, id);

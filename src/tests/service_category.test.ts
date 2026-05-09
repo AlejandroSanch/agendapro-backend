@@ -167,7 +167,7 @@ describe('Service & Category Repositories', () => {
       const categories = await listCategories(userId, 'service');
       
       expect(categories).toHaveLength(1);
-      expect(categories[0].name).toBe('Barbería');
+      expect(categories[0]!.name).toBe('Barbería');
       expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('WHERE type = ?'), ['service']);
     });
 

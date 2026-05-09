@@ -52,9 +52,14 @@ export function initialsFromName(name: string): string {
     .split(/\s+/)
     .filter(Boolean);
 
-  if (parts.length === 0) return 'US';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
+  const p0 = parts[0];
+  if (!p0) return 'US';
+  if (parts.length === 1) return p0.slice(0, 2).toUpperCase();
+  const p1 = parts[1];
+  if (!p1) return p0.slice(0, 2).toUpperCase();
+  const char0 = p0[0] || '';
+  const char1 = p1[0] || '';
+  return (char0 + char1).toUpperCase();
 }
 
 export function isPasswordHash(value: string): boolean {
