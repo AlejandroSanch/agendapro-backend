@@ -28,8 +28,10 @@ describe('PublicController (Integration)', () => {
       // 2. confirmAppointment (UPDATE)
       mockQuery.mockResolvedValueOnce([{}]);
       // 3. confirmAppointment (NOTIFICACION INFO)
-      mockQuery.mockResolvedValueOnce([[{ first_name: 'Juan', last_name: 'Perez', service_name: 'Corte' }]]);
-      
+      mockQuery.mockResolvedValueOnce([
+        [{ first_name: 'Juan', last_name: 'Perez', service_name: 'Corte' }],
+      ]);
+
       const response = await request(app).post('/api/public/appointments/apt123/confirm');
 
       expect(response.status).toBe(200);
@@ -66,14 +68,18 @@ describe('PublicController (Integration)', () => {
       // 1. resolveTenant
       mockQuery.mockResolvedValueOnce([[{ tenant_db_name: 'tenant_fast' }]]);
       // 2. getAppointmentDetails (MAIN QUERY)
-      mockQuery.mockResolvedValueOnce([[{
-        id: 'apt123',
-        start_at: '2023-10-20 10:00:00',
-        service_name: 'Corte',
-        customer_name: 'Juan',
-        specialist_name: 'Carlos',
-        business_address: 'Av. Siempre Viva 123'
-      }]]);
+      mockQuery.mockResolvedValueOnce([
+        [
+          {
+            id: 'apt123',
+            start_at: '2023-10-20 10:00:00',
+            service_name: 'Corte',
+            customer_name: 'Juan',
+            specialist_name: 'Carlos',
+            business_address: 'Av. Siempre Viva 123',
+          },
+        ],
+      ]);
       // 3. getAppointmentDetails (BIZ NAME)
       mockQuery.mockResolvedValueOnce([[{ business_name: 'Salon Demo' }]]);
 

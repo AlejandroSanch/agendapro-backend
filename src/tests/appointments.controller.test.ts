@@ -63,44 +63,42 @@ describe('AppointmentsController (Integration)', () => {
     it('debería crear una cita y disparar integraciones', async () => {
       (AppointmentService.validateCreate as jest.Mock).mockResolvedValue(true);
       (appointmentRepository.createAppointment as jest.Mock).mockResolvedValue(mockApt);
-      (WhatsAppService.sendAppointmentConfirmation as jest.Mock).mockResolvedValue({});
-      (GoogleCalendarService.pushEvent as jest.Mock).mockResolvedValue({});
+      (WhatsAppService.queueAppointmentConfirmation as jest.Mock).mockResolvedValue({});
+      (GoogleCalendarService.queueEventSync as jest.Mock).mockResolvedValue({});
 
-      const response = await request(app)
-        .post('/api/appointments')
-        .send({
-          clienteNombre: 'Juan Perez',
-          clienteTelefono: '521234567890',
-          servicio: 'Corte',
-          duracionMin: 30,
-          precio: 15,
-          fecha: '2023-10-20',
-          hora: '10:00',
-          estado: 'pendiente',
-          trabajador: 'Carlos',
-        });
+      const response = await request(app).post('/api/appointments').send({
+        clienteNombre: 'Juan Perez',
+        clienteTelefono: '521234567890',
+        servicio: 'Corte',
+        duracionMin: 30,
+        precio: 15,
+        fecha: '2023-10-20',
+        hora: '10:00',
+        estado: 'pendiente',
+        trabajador: 'Carlos',
+      });
 
       expect(response.status).toBe(201);
       expect(appointmentRepository.createAppointment).toHaveBeenCalled();
       expect(SseManager.broadcast).toHaveBeenCalled();
-      expect(WhatsAppService.sendAppointmentConfirmation).toHaveBeenCalled();
-      expect(GoogleCalendarService.pushEvent).toHaveBeenCalled();
+      expect(WhatsAppService.queueAppointmentConfirmation).toHaveBeenCalled();
+      expect(GoogleCalendarService.queueEventSync).toHaveBeenCalled();
     });
 
     it('debería fallar si la validación de negocio falla', async () => {
-      (AppointmentService.validateCreate as jest.Mock).mockRejectedValue(new Error('Solapamiento detected'));
+      (AppointmentService.validateCreate as jest.Mock).mockRejectedValue(
+        new Error('Solapamiento detected'),
+      );
 
-      const response = await request(app)
-        .post('/api/appointments')
-        .send({
-          clienteNombre: 'Juan Perez',
-          servicio: 'Corte',
-          duracionMin: 30,
-          precio: 15,
-          fecha: '2023-10-20',
-          hora: '10:00',
-          estado: 'pendiente',
-        });
+      const response = await request(app).post('/api/appointments').send({
+        clienteNombre: 'Juan Perez',
+        servicio: 'Corte',
+        duracionMin: 30,
+        precio: 15,
+        fecha: '2023-10-20',
+        hora: '10:00',
+        estado: 'pendiente',
+      });
 
       expect(response.status).toBe(500); // Porque Error genérico en asyncWrapper va a globalErrorHandler -> 500
       // Nota: Si AppointmentService lanzara ApiError, sería 400/409.
@@ -115,6 +113,7 @@ describe('AppointmentsController (Integration)', () => {
         ...mockApt,
         status: 'confirmed',
       });
+      (GoogleCalendarService.queueEventSync as jest.Mock).mockResolvedValue({});
 
       const response = await request(app)
         .patch('/api/appointments/apt123')

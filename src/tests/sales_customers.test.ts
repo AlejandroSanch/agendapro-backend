@@ -32,12 +32,8 @@ describe('Sales & Customers Integration', () => {
         .post('/api/sales/checkout')
         .send({
           clienteId: 'c1',
-          items: [
-            { tipo: 'product', id: 'p1', cantidad: 1, precioUnitario: 10 }
-          ],
-          pagos: [
-            { metodo: 'cash', monto: 10 }
-          ]
+          items: [{ tipo: 'product', id: 'p1', cantidad: 1, precioUnitario: 10 }],
+          pagos: [{ metodo: 'cash', monto: 10 }],
         });
 
       expect(response.status).toBe(201);
@@ -51,7 +47,7 @@ describe('Sales & Customers Integration', () => {
     it('debería listar clientes', async () => {
       (customerRepository.listCustomers as jest.Mock).mockResolvedValue({
         data: [mockCustomer],
-        total: 1
+        total: 1,
       });
 
       const response = await request(app).get('/api/customers');

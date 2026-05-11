@@ -69,8 +69,6 @@ interface SqliteAppointmentRow {
 async function main(): Promise<void> {
   let DatabaseSyncCtor: (new (path: string) => any) | null;
   try {
-    const { createRequire } = await import('module');
-    const require = createRequire(import.meta.url);
     DatabaseSyncCtor = require('node:sqlite').DatabaseSync as new (path: string) => any;
   } catch {
     console.error('node:sqlite no disponible en esta version de Node.');

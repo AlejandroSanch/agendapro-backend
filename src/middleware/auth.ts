@@ -33,7 +33,6 @@ export function verifyRefreshToken(token: string): RefreshTokenPayload {
   return jwt.verify(token, env.jwtRefreshSecret) as RefreshTokenPayload;
 }
 
-
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   let token = '';
   const authorization = req.headers.authorization;

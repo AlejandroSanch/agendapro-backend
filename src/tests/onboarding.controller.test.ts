@@ -29,7 +29,9 @@ describe('OnboardingController (Integration)', () => {
   describe('GET /api/onboarding/status', () => {
     it('debería retornar el estado de onboarding', async () => {
       (settingsRepository.getOnboardingStatus as jest.Mock).mockResolvedValue(false);
-      (settingsRepository.getBusinessSettings as jest.Mock).mockResolvedValue({ businessName: 'Test' });
+      (settingsRepository.getBusinessSettings as jest.Mock).mockResolvedValue({
+        businessName: 'Test',
+      });
 
       const response = await request(app).get('/api/onboarding/status');
 
@@ -59,9 +61,7 @@ describe('OnboardingController (Integration)', () => {
       const response = await request(app)
         .post('/api/onboarding/services')
         .send({
-          services: [
-            { name: 'Svc 1', durationMin: 30, priceCents: 10, category: 'G' }
-          ]
+          services: [{ name: 'Svc 1', durationMin: 30, priceCents: 10, category: 'G' }],
         });
 
       expect(response.status).toBe(200);

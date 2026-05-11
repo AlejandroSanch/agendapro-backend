@@ -1,8 +1,8 @@
-import { 
-  listStaff, 
-  createStaff, 
-  updateStaff, 
-  toggleStaffActive 
+import {
+  listStaff,
+  createStaff,
+  updateStaff,
+  toggleStaffActive,
 } from '../../data/repositories/staff.repository';
 import { getControlPool } from '../../data/db';
 import { getTenantDbNameByUserId } from '../../data/repositories/user.repository';
@@ -36,13 +36,15 @@ describe('StaffRepository', () => {
   describe('listStaff', () => {
     it('debería listar empleados con sus especialidades y horario', async () => {
       // 1. SELECT staff
-      mockQuery.mockResolvedValueOnce([[
-        { id: 'st1', first_name: 'Carlos', last_name: 'Perez', role_name: 'admin', is_active: 1 }
-      ]]);
+      mockQuery.mockResolvedValueOnce([
+        [{ id: 'st1', first_name: 'Carlos', last_name: 'Perez', role_name: 'admin', is_active: 1 }],
+      ]);
       // 2. getStaffEspecialidades
       mockQuery.mockResolvedValueOnce([[{ service_name: 'Corte' }]]);
       // 3. getStaffSchedule
-      mockQuery.mockResolvedValueOnce([[{ day_of_week: 1, start_time: '09:00:00', end_time: '18:00:00' }]]);
+      mockQuery.mockResolvedValueOnce([
+        [{ day_of_week: 1, start_time: '09:00:00', end_time: '18:00:00' }],
+      ]);
 
       const result = await listStaff(userId);
 
@@ -65,9 +67,9 @@ describe('StaffRepository', () => {
       // 5. countStaff
       mockQuery.mockResolvedValueOnce([[{ total: 1 }]]);
       // 6. getStaffById (SELECT staff)
-      mockQuery.mockResolvedValueOnce([[
-        { id: '100', first_name: 'Carlos', last_name: 'Perez', role_name: 'admin', is_active: 1 }
-      ]]);
+      mockQuery.mockResolvedValueOnce([
+        [{ id: '100', first_name: 'Carlos', last_name: 'Perez', role_name: 'admin', is_active: 1 }],
+      ]);
       // 7. getStaffEspecialidades
       mockQuery.mockResolvedValueOnce([[{ service_name: 'Corte' }]]);
       // 8. getStaffSchedule
@@ -76,7 +78,7 @@ describe('StaffRepository', () => {
       const result = await createStaff(userId, {
         nombre: 'Carlos Perez',
         rol: 'admin',
-        especialidades: ['Corte']
+        especialidades: ['Corte'],
       });
 
       expect(result?.id).toBe('100');

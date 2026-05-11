@@ -45,7 +45,7 @@ describe('Staff & Categories Integration', () => {
           nombre: 'Carlos',
           rol: 'admin',
           especialidades: ['Corte'],
-          activo: true
+          activo: true,
         });
 
       expect(response.status).toBe(201);
@@ -64,7 +64,9 @@ describe('Staff & Categories Integration', () => {
 
   describe('CategoriesController', () => {
     it('debería listar categorías', async () => {
-      (categoryRepository.listCategories as jest.Mock).mockResolvedValue([{ id: 'c1', name: 'General' }]);
+      (categoryRepository.listCategories as jest.Mock).mockResolvedValue([
+        { id: 'c1', name: 'General' },
+      ]);
 
       const response = await request(app).get('/api/categories?type=service');
 
@@ -73,7 +75,10 @@ describe('Staff & Categories Integration', () => {
     });
 
     it('debería crear una categoría', async () => {
-      (categoryRepository.createCategory as jest.Mock).mockResolvedValue({ id: 'c1', name: 'Test' });
+      (categoryRepository.createCategory as jest.Mock).mockResolvedValue({
+        id: 'c1',
+        name: 'Test',
+      });
 
       const response = await request(app)
         .post('/api/categories')

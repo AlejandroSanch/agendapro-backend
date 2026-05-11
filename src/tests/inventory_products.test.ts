@@ -54,19 +54,17 @@ describe('Inventory & Products Integration', () => {
     it('debería crear un producto', async () => {
       (productRepository.createProduct as jest.Mock).mockResolvedValue(mockProduct);
 
-      const response = await request(app)
-        .post('/api/products')
-        .send({
-          nombre: 'Shampoo',
-          sku: 'SH-001',
-          unidad: 'unid',
-          precio: 10,
-          costo: 5,
-          stock: 10,
-          alertaStock: 2,
-          activo: true,
-          categoriaId: 'c1'
-        });
+      const response = await request(app).post('/api/products').send({
+        nombre: 'Shampoo',
+        sku: 'SH-001',
+        unidad: 'unid',
+        precio: 10,
+        costo: 5,
+        stock: 10,
+        alertaStock: 2,
+        activo: true,
+        categoriaId: 'c1',
+      });
 
       expect(response.status).toBe(201);
       expect(response.body.product.id).toBe('p123');
@@ -87,14 +85,12 @@ describe('Inventory & Products Integration', () => {
       const mockLog = { id: 'log1', productId: 'p123', quantity: 5, type: 'in' };
       (inventoryRepository.adjustStock as jest.Mock).mockResolvedValue(mockLog);
 
-      const response = await request(app)
-        .post('/api/inventory/movements')
-        .send({
-          productId: 'p123',
-          type: 'in',
-          quantity: 5,
-          notes: 'Compra de stock'
-        });
+      const response = await request(app).post('/api/inventory/movements').send({
+        productId: 'p123',
+        type: 'in',
+        quantity: 5,
+        notes: 'Compra de stock',
+      });
 
       expect(response.status).toBe(201);
       expect(response.body.log.quantity).toBe(5);

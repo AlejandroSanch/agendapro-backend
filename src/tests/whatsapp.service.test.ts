@@ -37,7 +37,7 @@ describe('WhatsAppService', () => {
 
     it('debería lanzar error y registrarlo cuando falla la API', async () => {
       axiosPostSpy.mockRejectedValueOnce(new Error('API Failure'));
-      
+
       let error;
       try {
         await WhatsAppService.sendAppointmentReminder(to, customerName, date, time);

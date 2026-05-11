@@ -1,8 +1,8 @@
-import { 
-  listAppointments, 
-  findAppointmentById, 
-  createAppointment, 
-  updateAppointment 
+import {
+  listAppointments,
+  findAppointmentById,
+  createAppointment,
+  updateAppointment,
 } from '../../data/repositories/appointment.repository';
 import { getControlPool } from '../../data/db';
 import { getTenantDbNameByUserId } from '../../data/repositories/user.repository';
@@ -36,13 +36,17 @@ describe('AppointmentRepository', () => {
   describe('listAppointments', () => {
     it('debería listar citas y el total', async () => {
       mockQuery.mockResolvedValueOnce([[{ total: 5 }]]); // Count
-      mockQuery.mockResolvedValueOnce([[{ 
-        id: 'a1', 
-        status: 'scheduled', 
-        start_at: '2023-10-20 10:00:00',
-        customer_name: 'Juan Perez',
-        service_name: 'Corte'
-      }]]); // Data
+      mockQuery.mockResolvedValueOnce([
+        [
+          {
+            id: 'a1',
+            status: 'scheduled',
+            start_at: '2023-10-20 10:00:00',
+            customer_name: 'Juan Perez',
+            service_name: 'Corte',
+          },
+        ],
+      ]); // Data
 
       const result = await listAppointments(userId, { limit: 10 });
 
@@ -60,28 +64,35 @@ describe('AppointmentRepository', () => {
       priceCents: 1500,
       date: '2023-10-20',
       time: '10:00',
-      status: 'scheduled' as any
+      status: 'scheduled' as any,
     };
 
     it('debería crear una cita exitosamente', async () => {
       // Mock dinámico para manejar las múltiples consultas en orden
       mockConnection.query.mockImplementation(async (sql: string) => {
         if (sql.includes('FROM') && sql.includes('.customers')) return [[{ id: 'c1' }]];
-        if (sql.includes('SELECT') && sql.includes('FROM') && sql.includes('.appointments')) return [[]]; // overlap
+        if (sql.includes('SELECT') && sql.includes('FROM') && sql.includes('.appointments'))
+          return [[]]; // overlap
         if (sql.includes('FROM') && sql.includes('.services')) return [[{ id: 's1' }]];
         if (sql.includes('FROM') && sql.includes('.staff')) return [[{ id: 'st1' }]];
-        if (sql.includes('INSERT INTO') && sql.includes('.appointments')) return [{ insertId: 'new_a1' }];
-        if (sql.includes('INSERT INTO') && sql.includes('.appointment_services')) return [{ affectedRows: 1 }];
+        if (sql.includes('INSERT INTO') && sql.includes('.appointments'))
+          return [{ insertId: 'new_a1' }];
+        if (sql.includes('INSERT INTO') && sql.includes('.appointment_services'))
+          return [{ affectedRows: 1 }];
         return [[]];
       });
 
-      mockQuery.mockResolvedValue([[{ 
-        id: 'new_a1', 
-        status: 'scheduled', 
-        start_at: '2023-10-20 10:00:00',
-        customer_name: 'Juan Perez',
-        service_name: 'Corte'
-      }]]);
+      mockQuery.mockResolvedValue([
+        [
+          {
+            id: 'new_a1',
+            status: 'scheduled',
+            start_at: '2023-10-20 10:00:00',
+            customer_name: 'Juan Perez',
+            service_name: 'Corte',
+          },
+        ],
+      ]);
 
       const result = await createAppointment(userId, input);
 
@@ -96,9 +107,10 @@ describe('AppointmentRepository', () => {
 
       // Mock de los pasos previos necesarios antes de llegar al check de fecha
       mockConnection.query.mockResolvedValueOnce([[{ id: 'c1' }]]); // ensureCustomer
-      
-      await expect(createAppointment(userId, { ...input, date: dateStr, status: 'completed' as any }))
-        .rejects.toThrow('No se puede completar una cita con fecha futura.');
+
+      await expect(
+        createAppointment(userId, { ...input, date: dateStr, status: 'completed' as any }),
+      ).rejects.toThrow('No se puede completar una cita con fecha futura.');
     });
   });
 });

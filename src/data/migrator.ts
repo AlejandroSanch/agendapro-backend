@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const localRequire = require;
 
 import { Umzug } from 'umzug';

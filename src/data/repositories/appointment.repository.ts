@@ -117,8 +117,10 @@ export async function listAppointments(
     [...params, limit, offset],
   );
 
+  const appointments = rows.map(toAppointmentRecord);
+
   return {
-    data: rows.map(toAppointmentRecord),
+    data: appointments,
     total,
   };
 }

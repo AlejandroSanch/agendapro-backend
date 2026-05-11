@@ -35,7 +35,7 @@ describe('ServicesController (Integration)', () => {
     it('debería listar servicios', async () => {
       (serviceRepository.listServices as jest.Mock).mockResolvedValue({
         data: [mockService],
-        total: 1
+        total: 1,
       });
 
       const response = await request(app).get('/api/services');
@@ -50,14 +50,12 @@ describe('ServicesController (Integration)', () => {
     it('debería crear un servicio', async () => {
       (serviceRepository.createService as jest.Mock).mockResolvedValue(mockService);
 
-      const response = await request(app)
-        .post('/api/services')
-        .send({
-          nombre: 'Corte de Cabello',
-          categoria: 'Estilismo',
-          duracionMin: 30,
-          precio: 15
-        });
+      const response = await request(app).post('/api/services').send({
+        nombre: 'Corte de Cabello',
+        categoria: 'Estilismo',
+        duracionMin: 30,
+        precio: 15,
+      });
 
       expect(response.status).toBe(201);
       expect(response.body.service.id).toBe('s1');
@@ -69,14 +67,12 @@ describe('ServicesController (Integration)', () => {
       (dbError as any).sqlMessage = 'uniq_services_name';
       (serviceRepository.createService as jest.Mock).mockRejectedValue(dbError);
 
-      const response = await request(app)
-        .post('/api/services')
-        .send({
-          nombre: 'Duplicado',
-          categoria: 'G',
-          duracionMin: 30,
-          precio: 10
-        });
+      const response = await request(app).post('/api/services').send({
+        nombre: 'Duplicado',
+        categoria: 'G',
+        duracionMin: 30,
+        precio: 10,
+      });
 
       expect(response.status).toBe(409);
       expect(response.body.error).toContain('existe un servicio');
