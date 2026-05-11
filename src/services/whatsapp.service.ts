@@ -105,6 +105,30 @@ export const WhatsAppService = {
         },
         'Error enviando confirmación WhatsApp',
       );
+      throw error;
     }
+  },
+
+  /**
+   * Encola un mensaje de confirmación inmediata al agendar.
+   */
+  queueAppointmentConfirmation: async (
+    userId: string,
+    to: string,
+    customerName: string,
+    serviceName: string,
+    date: string,
+    time: string,
+  ) => {
+    const { getControlPool } = require('../data/db');
+    const crypto = require('crypto');
+    const db = getControlPool();
+    const jobId = `job_wa_${crypto.randomUUID().replace(/-/g, '')}`;
+    const payload = JSON.stringify({ to, customerName, serviceName, date, time });
+
+    await db.query(
+      `INSERT INTO background_jobs (id, user_id, job_type, payload, status, run_at) VALUES (?, ?, 'whatsapp_confirmation', ?, 'pending', NOW())`,
+      [jobId, userId, payload]
+    );
   },
 };

@@ -80,6 +80,10 @@ async function bootstrap(): Promise<void> {
 
     // Start cron jobs
     cron.schedule('0 * * * *', runRemindersJob); // Runs at minute 0 past every hour
+    
+    // Start background worker for integrations
+    const { initBackgroundWorker } = require('./jobs/background-worker');
+    initBackgroundWorker();
 
     const server = app.listen(env.port, '0.0.0.0', () => {
       logger.info(`AgendaPro backend listening on all interfaces at port ${env.port}`);

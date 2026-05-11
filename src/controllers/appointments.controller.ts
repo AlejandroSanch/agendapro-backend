@@ -138,17 +138,18 @@ export const AppointmentsController = {
         let cleanPhone = apiAppointment.clienteTelefono.replace(/\D/g, '');
         if (cleanPhone.length === 10) cleanPhone = '52' + cleanPhone;
 
-        WhatsAppService.sendAppointmentConfirmation(
+        WhatsAppService.queueAppointmentConfirmation(
+          user.id,
           cleanPhone,
           apiAppointment.clienteNombre,
           apiAppointment.servicio,
           apiAppointment.fecha,
           apiAppointment.hora,
-        ).catch((err) => console.error('Error enviando confirmación WA:', err));
+        ).catch((err) => console.error('Error encolando confirmación WA:', err));
       }
 
       // Sincronizar asincrónicamente con Google Calendar
-      GoogleCalendarService.pushEvent(user.id, apiAppointment, 'create').catch(console.error);
+      GoogleCalendarService.queueEventSync(user.id, apiAppointment, 'create').catch(console.error);
 
       res.status(201).json({ appointment: apiAppointment });
     } catch (error) {
@@ -205,7 +206,7 @@ export const AppointmentsController = {
       });
 
       const googleAction = apiAppointment.estado === 'cancelada' ? 'delete' : 'update';
-      GoogleCalendarService.pushEvent(user.id, apiAppointment, googleAction).catch(console.error);
+      GoogleCalendarService.queueEventSync(user.id, apiAppointment, googleAction).catch(console.error);
 
       res.json({ appointment: apiAppointment });
     } catch (error) {

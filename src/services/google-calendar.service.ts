@@ -168,6 +168,25 @@ export const GoogleCalendarService = {
         },
         '[GoogleCalendarService] Error pushing event',
       );
+      throw error;
     }
+  },
+
+  async queueEventSync(
+    userId: string,
+    appointment: CalendarAppointment,
+    action: 'create' | 'update' | 'delete',
+  ) {
+    if (!env.googleClientId) return;
+
+    const crypto = require('crypto');
+    const db = getControlPool();
+    const jobId = `job_gc_${crypto.randomUUID().replace(/-/g, '')}`;
+    const payload = JSON.stringify({ appointment, action });
+
+    await db.query(
+      `INSERT INTO background_jobs (id, user_id, job_type, payload, status, run_at) VALUES (?, ?, 'google_calendar_sync', ?, 'pending', NOW())`,
+      [jobId, userId, payload]
+    );
   },
 };
