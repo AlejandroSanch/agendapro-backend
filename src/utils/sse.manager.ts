@@ -8,7 +8,7 @@ export const SseManager = {
     if (!clients[businessId]) {
       clients[businessId] = [];
     }
-    clients[businessId].push(res);
+    clients[businessId]!.push(res);
 
     // Keep connection alive with heartbeat comments periodically (optional but good practice)
     const interval = setInterval(() => {

@@ -40,6 +40,7 @@ interface UserRow extends RowDataPacket {
   avatar_initials: string | null;
   trial_end_date: string | null;
   tenant_db_name: string;
+  password_reset_expires: string | null;
 }
 
 interface TenantRefRow extends RowDataPacket {
@@ -193,6 +194,68 @@ export async function refreshEmailVerificationTokenByEmail(email: string): Promi
   ]);
 
   return nextToken;
+}
+
+export async function setPasswordResetToken(
+  email: string,
+): Promise<{ token: string; userName: string } | null> {
+  const db = getControlPool();
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  const [rows] = await db.query<UserRow[]>(
+    `SELECT id, name, email_verified FROM users WHERE email = ? LIMIT 1`,
+    [normalizedEmail],
+  );
+
+  const row = rows[0];
+  if (!row) return null;
+
+  const token = generateEmailVerificationToken();
+  const expires = new Date(Date.now() + 60 * 60 * 1000) // 1 hour
+    .toISOString()
+    .slice(0, 19)
+    .replace('T', ' ');
+
+  await db.query(
+    `UPDATE users SET password_reset_token = ?, password_reset_expires = ?, updated_at = NOW() WHERE id = ?`,
+    [token, expires, row.id],
+  );
+
+  return { token, userName: row.name };
+}
+
+export async function resetPasswordByToken(
+  token: string,
+  newPassword: string,
+): Promise<boolean> {
+  const db = getControlPool();
+  const normalizedToken = String(token || '').trim();
+  if (!normalizedToken || !newPassword) return false;
+
+  const [rows] = await db.query<UserRow[]>(
+    `SELECT id, password_reset_expires FROM users WHERE password_reset_token = ? LIMIT 1`,
+    [normalizedToken],
+  );
+
+  const row = rows[0];
+  if (!row) return false;
+
+  // Check expiration
+  const expires = row.password_reset_expires;
+  if (expires) {
+    const expiresDate = new Date(String(expires));
+    if (expiresDate.getTime() < Date.now()) return false;
+  }
+
+  const passwordHash = hashPassword(newPassword);
+
+  const [result] = await db.query<ResultSetHeader>(
+    `UPDATE users SET password = ?, password_reset_token = NULL, password_reset_expires = NULL, updated_at = NOW() WHERE id = ?`,
+    [passwordHash, row.id],
+  );
+
+  return result.affectedRows > 0;
 }
 
 export function sanitizeUser(user: UserRecord): UserPublic {

@@ -15,6 +15,8 @@ export const checkoutPaymentSchema = z.object({
 export const checkoutSchema = z.object({
   clienteId: z.string().min(1, 'ID de cliente requerido'),
   citaId: z.string().optional(),
+  notas: z.string().optional(),
+  descuento: z.number().min(0, 'El descuento no puede ser negativo').optional(),
   items: z.array(checkoutItemSchema).min(1, 'Debe haber al menos un ítem'),
   pagos: z.array(checkoutPaymentSchema).min(1, 'Debe haber al menos un pago'),
 });

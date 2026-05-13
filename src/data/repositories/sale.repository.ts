@@ -20,6 +20,8 @@ export interface CheckoutInput {
   appointmentId?: string;
   items: CheckoutItem[];
   payments: CheckoutPayment[];
+  discountCents?: number;
+  notes?: string;
 }
 
 export async function createSale(userId: string, input: CheckoutInput): Promise<string | null> {
@@ -36,14 +38,15 @@ export async function createSale(userId: string, input: CheckoutInput): Promise<
       (sum, item) => sum + item.unitPriceCents * item.quantity,
       0,
     );
+    const discountCents = input.discountCents || 0;
     const taxCents = 0; // Por ahora 0, escalable luego
-    const totalCents = subtotalCents + taxCents;
+    const totalCents = Math.max(0, subtotalCents - discountCents + taxCents);
 
     // 1. Crear la Venta
     const [saleResult] = await connection.query<ResultSetHeader>(
-      `INSERT INTO ${q(tenantDbName)}.sales (appointment_id, customer_id, subtotal_cents, tax_cents, total_cents, created_at)
-       VALUES (?, ?, ?, ?, ?, NOW())`,
-      [input.appointmentId ?? null, input.customerId, subtotalCents, taxCents, totalCents],
+      `INSERT INTO ${q(tenantDbName)}.sales (appointment_id, customer_id, subtotal_cents, discount_cents, tax_cents, total_cents, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [input.appointmentId ?? null, input.customerId, subtotalCents, discountCents, taxCents, totalCents, input.notes ?? null],
     );
     const saleId = saleResult.insertId.toString();
 

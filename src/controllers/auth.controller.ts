@@ -4,17 +4,21 @@ import {
   findUserByEmail,
   findUserById,
   refreshEmailVerificationTokenByEmail,
+  resetPasswordByToken,
   sanitizeUser,
+  setPasswordResetToken,
   verifyUserEmailByToken,
 } from '../data/repositories/user.repository';
 import { verifyPasswordPlain } from '../data/utils';
 import { issueAccessToken, issueRefreshToken, verifyRefreshToken } from '../middleware/auth';
 import { env } from '../config/env';
 import {
+  forgotPasswordSchema,
   loginSchema,
   refreshTokenSchema,
   registerSchema,
   resendVerificationSchema,
+  resetPasswordSchema,
   verificationTokenSchema,
 } from '../validators/auth.validators';
 import { asyncWrapper } from '../utils/asyncWrapper';
@@ -25,6 +29,11 @@ import {
   buildVerificationEmailText,
   buildVerificationUrl,
 } from '../templates/verification-email.template';
+import {
+  buildPasswordResetEmailHtml,
+  buildPasswordResetEmailText,
+  buildPasswordResetUrl,
+} from '../templates/password-reset-email.template';
 
 function verificationPreview(token: string): { token: string; url: string } {
   return {
@@ -186,5 +195,48 @@ export const AuthController = {
     } catch {
       throw new ApiError(401, 'Refresh token inválido o expirado.');
     }
+  }),
+
+  forgotPassword: asyncWrapper(async (req: Request, res: Response) => {
+    const data = forgotPasswordSchema.parse(req.body);
+
+    // Always respond with generic message to prevent email enumeration
+    const genericMessage = 'Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.';
+
+    const result = await setPasswordResetToken(data.email);
+
+    if (result) {
+      const resetUrl = buildPasswordResetUrl(result.token);
+      const html = buildPasswordResetEmailHtml({ userName: result.userName, resetUrl });
+      const text = buildPasswordResetEmailText({ userName: result.userName, resetUrl });
+
+      // Fire-and-forget email
+      sendMail(data.email, 'Recuperar contraseña - AgendaPro', text, html).catch((err) => {
+        console.error(`❌ Error enviando correo de recuperación a ${data.email}:`, err);
+      });
+    }
+
+    const preview =
+      result && process.env.NODE_ENV !== 'production'
+        ? { token: result.token, url: buildPasswordResetUrl(result.token) }
+        : null;
+
+    res.json({
+      message: genericMessage,
+      resetPreview: preview,
+    });
+  }),
+
+  resetPassword: asyncWrapper(async (req: Request, res: Response) => {
+    const data = resetPasswordSchema.parse(req.body);
+
+    const success = await resetPasswordByToken(data.token, data.password);
+    if (!success) {
+      throw new ApiError(400, 'El enlace de recuperación es inválido o ha expirado. Solicita uno nuevo.');
+    }
+
+    res.json({
+      message: 'Tu contraseña ha sido restablecida exitosamente. Ya puedes iniciar sesión.',
+    });
   }),
 };

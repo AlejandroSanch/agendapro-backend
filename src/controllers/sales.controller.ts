@@ -14,6 +14,8 @@ export const SalesController = {
     const payload = {
       customerId: data.clienteId,
       appointmentId: data.citaId,
+      notes: data.notas,
+      discountCents: data.descuento ? Math.round(data.descuento * 100) : 0,
       items: data.items.map((item) => ({
         type: item.tipo,
         id: item.id,

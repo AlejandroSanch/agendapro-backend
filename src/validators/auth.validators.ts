@@ -33,3 +33,12 @@ export const resendVerificationSchema = z.object({
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token requerido.'),
 });
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email('Correo electrónico inválido.'),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, 'Token de restablecimiento requerido.'),
+  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.'),
+});
