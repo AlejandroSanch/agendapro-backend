@@ -9,6 +9,7 @@ export interface StaffBlock {
   title: string;
   startAt: string;
   endAt: string;
+  isRecurrent: boolean;
 }
 
 export interface CreateStaffBlockInput {
@@ -16,6 +17,7 @@ export interface CreateStaffBlockInput {
   title: string;
   startAt: string;
   endAt: string;
+  isRecurrent?: boolean;
 }
 
 export async function listStaffBlocks(
@@ -45,12 +47,12 @@ export async function listStaffBlocks(
   const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT id, staff_id as staffId, title, DATE_FORMAT(start_at, '%Y-%m-%d %H:%i:%s') as startAt, DATE_FORMAT(end_at, '%Y-%m-%d %H:%i:%s') as endAt 
+    `SELECT id, staff_id as staffId, title, DATE_FORMAT(start_at, '%Y-%m-%d %H:%i:%s') as startAt, DATE_FORMAT(end_at, '%Y-%m-%d %H:%i:%s') as endAt, is_recurrent as isRecurrent
      FROM ${q(tenantDbName)}.staff_blocks ${whereClause} ORDER BY start_at ASC`,
     params,
   );
 
-  return rows as StaffBlock[];
+  return rows.map((r) => ({ ...r, isRecurrent: r.isRecurrent === 1 })) as StaffBlock[];
 }
 
 export async function createStaffBlock(
@@ -62,13 +64,14 @@ export async function createStaffBlock(
 
   const db = getControlPool();
   const [result] = await db.query<ResultSetHeader>(
-    `INSERT INTO ${q(tenantDbName)}.staff_blocks (staff_id, title, start_at, end_at) VALUES (?, ?, ?, ?)`,
-    [input.staffId, input.title, input.startAt, input.endAt],
+    `INSERT INTO ${q(tenantDbName)}.staff_blocks (staff_id, title, start_at, end_at, is_recurrent) VALUES (?, ?, ?, ?, ?)`,
+    [input.staffId, input.title, input.startAt, input.endAt, input.isRecurrent ? 1 : 0],
   );
 
   return {
     id: result.insertId,
     ...input,
+    isRecurrent: input.isRecurrent ?? false,
   };
 }
 
@@ -83,4 +86,15 @@ export async function deleteStaffBlock(userId: string, id: number): Promise<bool
   );
 
   return result.affectedRows > 0;
+}
+
+export async function deleteFutureRecurrentBlocks(userId: string, staffId: number, fromDateStr: string): Promise<void> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return;
+
+  const db = getControlPool();
+  await db.query<ResultSetHeader>(
+    `DELETE FROM ${q(tenantDbName)}.staff_blocks WHERE staff_id = ? AND is_recurrent = 1 AND DATE(start_at) >= ?`,
+    [staffId, fromDateStr],
+  );
 }

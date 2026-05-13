@@ -2,6 +2,7 @@ import { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { getControlPool } from '../db';
 import { q } from '../utils';
 import { getTenantDbNameByUserId } from './user.repository';
+import { getBusinessSettings } from './settings.repository';
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -194,7 +195,13 @@ export async function createStaff(
     await connection.commit();
 
     const totalStaff = await countStaff(tenantDbName);
-    return await getStaffById(tenantDbName, staffId, totalStaff - 1);
+    const newStaff = await getStaffById(tenantDbName, staffId, totalStaff - 1);
+    
+    if (newStaff) {
+      await syncStaffRecurrentBlocks(userId, tenantDbName, newStaff);
+    }
+
+    return newStaff;
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -295,7 +302,13 @@ export async function updateStaff(
     }
 
     await connection.commit();
-    return await getStaffById(tenantDbName, staffId);
+    const updatedStaff = await getStaffById(tenantDbName, staffId);
+    
+    if (updatedStaff) {
+      await syncStaffRecurrentBlocks(userId, tenantDbName, updatedStaff);
+    }
+    
+    return updatedStaff;
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -548,3 +561,90 @@ function toStaffRecord(
     color: STAFF_COLORS[Math.abs(colorIndex) % STAFF_COLORS.length] || '#CCCCCC',
   };
 }
+
+export async function syncStaffRecurrentBlocks(
+  userId: string,
+  tenantDbName: string,
+  staffRecord: StaffRecord
+): Promise<void> {
+  const db = getControlPool();
+  
+  // 1. Delete future recurrent blocks for this staff
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayStr = today.toISOString().split('T')[0];
+
+  await db.query(
+    `DELETE FROM ${q(tenantDbName)}.staff_blocks WHERE staff_id = ? AND is_recurrent = 1 AND DATE(start_at) >= ?`,
+    [staffRecord.id, todayStr]
+  );
+
+  // 2. Determine break settings
+  let breakStart: string | null = null;
+  let breakEnd: string | null = null;
+
+  if (staffRecord.descansoPropio && staffRecord.descansoDesde && staffRecord.descansoHasta) {
+    breakStart = staffRecord.descansoDesde.substring(0, 5);
+    breakEnd = staffRecord.descansoHasta.substring(0, 5);
+  } else {
+    const bs = await getBusinessSettings(userId);
+    if (bs?.breakEnabled && bs?.breakStart && bs?.breakEnd) {
+      breakStart = bs.breakStart;
+      breakEnd = bs.breakEnd;
+    }
+  }
+
+  if (!breakStart || !breakEnd) return;
+
+  // 3. Generate blocks for the next 90 days
+  const codeMap = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'];
+  const inserts: any[] = [];
+
+  for (let i = 0; i < 90; i++) {
+    const date = new Date(today.getTime() + i * 24 * 60 * 60 * 1000);
+    const dow = date.getDay();
+    const wdCode = codeMap[dow];
+
+    const diaHorario = staffRecord.horario?.find((h) => h.dia === wdCode);
+    if (!diaHorario || !diaHorario.activo) continue; // Doesn't work this day
+
+    const dateStr = date.toISOString().split('T')[0];
+    const startAt = `${dateStr} ${breakStart}:00`;
+    const endAt = `${dateStr} ${breakEnd}:00`;
+
+    inserts.push([
+      staffRecord.id,
+      'Descanso',
+      startAt,
+      endAt,
+      1 // is_recurrent
+    ]);
+  }
+
+  if (inserts.length > 0) {
+    await db.query(
+      `INSERT INTO ${q(tenantDbName)}.staff_blocks (staff_id, title, start_at, end_at, is_recurrent) VALUES ?`,
+      [inserts]
+    );
+  }
+}
+
+export async function syncAllStaffRecurrentBlocks(userId: string): Promise<void> {
+  const tenantDbName = await getTenantDbNameByUserId(userId);
+  if (!tenantDbName) return;
+
+  const db = getControlPool();
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT id FROM ${q(tenantDbName)}.staff WHERE deleted_at IS NULL`
+  );
+
+  for (const row of rows) {
+    const staffId = row.id.toString();
+    const staffRecord = await getStaffById(tenantDbName, staffId);
+    if (staffRecord) {
+      await syncStaffRecurrentBlocks(userId, tenantDbName, staffRecord);
+    }
+  }
+}
+
+

@@ -2,6 +2,7 @@ import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { getControlPool } from '../db';
 import { q } from '../utils';
 import { getTenantDbNameByUserId } from './user.repository';
+import { syncAllStaffRecurrentBlocks } from './staff.repository';
 
 export interface BusinessSettings {
   businessType: string;
@@ -205,6 +206,16 @@ export async function upsertBusinessSettings(
     }
 
     await connection.commit();
+    
+    // Sync all staff blocks if break settings changed
+    if (
+      next.breakEnabled !== current.breakEnabled ||
+      next.breakStart !== current.breakStart ||
+      next.breakEnd !== current.breakEnd
+    ) {
+      await syncAllStaffRecurrentBlocks(userId);
+    }
+
     return getBusinessSettings(userId);
   } catch (error) {
     await connection.rollback();
