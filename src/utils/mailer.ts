@@ -50,7 +50,15 @@ export async function sendMail(
 
     logger.info(`Email sent successfully to ${to} (messageId: ${info.messageId})`);
   } catch (error) {
-    logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, `Error sending email to ${to}`);
+    logger.error({ 
+      err: error instanceof Error ? error : new Error(String(error)),
+      smtpConfig: {
+        host: env.smtpHost,
+        port: env.smtpPort,
+        user: env.smtpUser,
+        from: env.smtpFromEmail
+      }
+    }, `Error sending email to ${to}`);
     throw error;
   }
 }

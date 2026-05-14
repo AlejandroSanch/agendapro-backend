@@ -51,9 +51,11 @@ async function processPendingJobs() {
         await WhatsAppService.sendAppointmentConfirmation(
           p.to,
           p.customerName,
+          p.businessName,
           p.serviceName,
           p.date,
-          p.time
+          p.time,
+          p.confirmLink
         );
       } else if (job.job_type === 'google_calendar_sync') {
         const p = job.payload;

@@ -170,7 +170,7 @@ export async function createAppointment(
     const overlap = await getCustomerOverlap(connection, tenantDbName, customerId, startAt, endAt);
     if (overlap) {
       throw new Error(
-        `El cliente ya tiene una cita de "${overlap.serviceName}" a las ${overlap.time}.`,
+        `Este cliente ya tiene una cita ocupando este horario ("${overlap.serviceName}" a las ${overlap.time}). Un cliente no puede tener dos citas simultáneas.`,
       );
     }
 
@@ -323,7 +323,7 @@ export async function updateAppointment(
     );
     if (overlap) {
       throw new Error(
-        `El cliente ya tiene una cita de "${overlap.serviceName}" a las ${overlap.time}.`,
+        `Este cliente ya tiene una cita ocupando este horario ("${overlap.serviceName}" a las ${overlap.time}). Un cliente no puede tener dos citas simultáneas.`,
       );
     }
 

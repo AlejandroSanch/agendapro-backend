@@ -21,6 +21,15 @@ import { WhatsAppService } from '../services/whatsapp.service';
 import { AppointmentService } from '../services/appointment.service';
 import { cleanDeletedName } from '../utils/sanitize';
 import { getAuthUser } from '../utils/request';
+import { sendMail } from '../utils/mailer';
+import { getBusinessSettings } from '../data/repositories/settings.repository';
+import {
+  buildAppointmentConfirmationHtml,
+  buildAppointmentConfirmationText,
+} from '../templates/appointment-confirmation.template';
+import { getControlPool } from '../data/db';
+import { getTenantDbNameByUserId } from '../data/repositories/user.repository';
+import { q } from '../data/utils';
 
 // ── Status mapping ───────────────────────────────────────────────────────────
 
@@ -133,6 +142,55 @@ export const AppointmentsController = {
         appointment: apiAppointment,
       });
 
+      // Obtener settings para el nombre del negocio (se usa en WA y Email)
+      const settings = await getBusinessSettings(user.id);
+      const bizName = (settings as any)?.businessName || (user as any).businessName || 'AgendaPro Business';
+      const bizAddress = settings?.address || 'Dirección por confirmar';
+      const confirmLink = `${process.env.API_BASE_URL || 'http://localhost:4000'}/api/public/appointments/${apiAppointment.id}/confirm`;
+
+      // Enviar correo de confirmación si hay email configurado
+      const db = getControlPool();
+      const tenantDbName = await getTenantDbNameByUserId(user.id);
+      
+      if (tenantDbName) {
+        // Obtenemos el email del cliente buscando en la tabla de clientes vinculada a esta cita
+        const [customerRows]: any = await db.query(
+          `SELECT c.email FROM ${q(tenantDbName)}.customers c
+           JOIN ${q(tenantDbName)}.appointments a ON a.customer_id = c.id
+           WHERE a.id = ? LIMIT 1`,
+          [appointment.id]
+        );
+        const customerEmail = customerRows[0]?.email;
+
+        if (customerEmail) {
+          const dateObj = new Date(apiAppointment.fecha + 'T00:00:00');
+          const dateFormatted = dateObj.toLocaleDateString('es-MX', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+          });
+
+          const templateParams = {
+            customerName: apiAppointment.clienteNombre,
+            businessName: bizName,
+            serviceName: apiAppointment.servicio,
+            specialistName: apiAppointment.trabajador || 'Especialista asignado',
+            dateFormatted,
+            timeFormatted: apiAppointment.hora,
+            businessAddress: bizAddress,
+            confirmLink: confirmLink,
+          };
+
+          const subject = `Confirmación de cita: ${apiAppointment.servicio}`;
+          const html = buildAppointmentConfirmationHtml(templateParams);
+          const text = buildAppointmentConfirmationText(templateParams);
+
+          sendMail(customerEmail, subject, text, html).catch((err) =>
+            console.error('Error enviando mail de confirmación:', err)
+          );
+        }
+      }
+
       // Enviar confirmación por WhatsApp si hay teléfono
       if (apiAppointment.clienteTelefono) {
         let cleanPhone = apiAppointment.clienteTelefono.replace(/\D/g, '');
@@ -142,9 +200,11 @@ export const AppointmentsController = {
           user.id,
           cleanPhone,
           apiAppointment.clienteNombre,
+          bizName,
           apiAppointment.servicio,
           apiAppointment.fecha,
           apiAppointment.hora,
+          confirmLink,
         ).catch((err) => console.error('Error encolando confirmación WA:', err));
       }
 
@@ -153,7 +213,7 @@ export const AppointmentsController = {
 
       res.status(201).json({ appointment: apiAppointment });
     } catch (error) {
-      if (error instanceof Error && error.message.includes('fecha futura')) {
+      if (error instanceof Error && (error.message.includes('fecha futura') || error.message.includes('simultáneas'))) {
         throw new ApiError(400, error.message);
       }
       throw error;
@@ -210,7 +270,7 @@ export const AppointmentsController = {
 
       res.json({ appointment: apiAppointment });
     } catch (error) {
-      if (error instanceof Error && error.message.includes('fecha futura')) {
+      if (error instanceof Error && (error.message.includes('fecha futura') || error.message.includes('simultáneas'))) {
         throw new ApiError(400, error.message);
       }
       throw error;

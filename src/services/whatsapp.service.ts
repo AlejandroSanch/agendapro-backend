@@ -32,16 +32,37 @@ export const WhatsAppService = {
   /**
    * Envía un mensaje de plantilla para recordatorio de cita.
    */
-  sendAppointmentReminder: async (to: string, customerName: string, date: string, time: string) => {
+  sendAppointmentReminder: async (to: string, customerName: string, businessName: string, serviceName: string, date: string, time: string, confirmLink: string) => {
     const url = `https://graph.facebook.com/v17.0/${env.whatsappPhoneNumberId}/messages`;
+    const dateFormatted = formatWhatsAppDate(date);
 
     const data = {
       messaging_product: 'whatsapp',
       to: to,
       type: 'template',
       template: {
-        name: 'hello_world',
-        language: { code: 'en_US' },
+        name: 'appointment_reminder',
+        language: { code: 'es' },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: customerName },
+              { type: 'text', text: businessName },
+              { type: 'text', text: serviceName },
+              { type: 'text', text: dateFormatted },
+              { type: 'text', text: time },
+            ],
+          },
+          {
+            type: 'button',
+            sub_type: 'url',
+            index: '0',
+            parameters: [
+              { type: 'text', text: confirmLink.split('/').slice(-2, -1)[0] }, // Extract ID from link
+            ],
+          },
+        ],
       },
     };
 
@@ -72,19 +93,42 @@ export const WhatsAppService = {
   sendAppointmentConfirmation: async (
     to: string,
     customerName: string,
+    businessName: string,
     serviceName: string,
     date: string,
     time: string,
+    confirmLink: string,
   ) => {
     const url = `https://graph.facebook.com/v17.0/${env.whatsappPhoneNumberId}/messages`;
+    const dateFormatted = formatWhatsAppDate(date);
 
     const data = {
       messaging_product: 'whatsapp',
       to: to,
       type: 'template',
       template: {
-        name: 'hello_world',
-        language: { code: 'en_US' },
+        name: 'appointment_confirmation',
+        language: { code: 'es' },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: customerName },
+              { type: 'text', text: businessName },
+              { type: 'text', text: serviceName },
+              { type: 'text', text: dateFormatted },
+              { type: 'text', text: time },
+            ],
+          },
+          {
+            type: 'button',
+            sub_type: 'url',
+            index: '0',
+            parameters: [
+              { type: 'text', text: confirmLink.split('/').slice(-2, -1)[0] }, // Extract ID from link
+            ],
+          },
+        ],
       },
     };
 
@@ -116,15 +160,17 @@ export const WhatsAppService = {
     userId: string,
     to: string,
     customerName: string,
+    businessName: string,
     serviceName: string,
     date: string,
     time: string,
+    confirmLink: string,
   ) => {
     const { getControlPool } = require('../data/db');
     const crypto = require('crypto');
     const db = getControlPool();
     const jobId = `job_wa_${crypto.randomUUID().replace(/-/g, '')}`;
-    const payload = JSON.stringify({ to, customerName, serviceName, date, time });
+    const payload = JSON.stringify({ to, customerName, businessName, serviceName, date, time, confirmLink });
 
     await db.query(
       `INSERT INTO background_jobs (id, user_id, job_type, payload, status, run_at) VALUES (?, ?, 'whatsapp_confirmation', ?, 'pending', NOW())`,

@@ -144,8 +144,11 @@ export async function runRemindersJob() {
                 await WhatsAppService.sendAppointmentReminder(
                   cleanPhone,
                   customerName,
+                  bizName,
+                  serviceName,
                   dateFormatted,
                   timeFormatted,
+                  emailConfirmLink
                 );
 
                 await logNotification(
