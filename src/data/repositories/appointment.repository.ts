@@ -162,7 +162,7 @@ export async function createAppointment(
     if (normalized.status === 'completed') {
       const startAtDate = new Date(startAt.replace(' ', 'T'));
       if (startAtDate > new Date()) {
-        throw new Error('No se puede completar una cita con fecha futura.');
+        throw new Error('No se ha llevado a cabo esta cita aún.');
       }
     }
 
@@ -308,7 +308,7 @@ export async function updateAppointment(
     if (merged.status === 'completed') {
       const startAtDate = new Date(startAt.replace(' ', 'T'));
       if (startAtDate > new Date()) {
-        throw new Error('No se puede completar una cita con fecha futura.');
+        throw new Error('No se ha llevado a cabo esta cita aún.');
       }
     }
 

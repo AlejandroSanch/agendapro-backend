@@ -213,7 +213,7 @@ export const AppointmentsController = {
 
       res.status(201).json({ appointment: apiAppointment });
     } catch (error) {
-      if (error instanceof Error && (error.message.includes('fecha futura') || error.message.includes('simultáneas'))) {
+      if (error instanceof Error && (error.message.includes('llevado a cabo') || error.message.includes('simultáneas'))) {
         throw new ApiError(400, error.message);
       }
       throw error;
@@ -270,7 +270,7 @@ export const AppointmentsController = {
 
       res.json({ appointment: apiAppointment });
     } catch (error) {
-      if (error instanceof Error && (error.message.includes('fecha futura') || error.message.includes('simultáneas'))) {
+      if (error instanceof Error && (error.message.includes('llevado a cabo') || error.message.includes('simultáneas'))) {
         throw new ApiError(400, error.message);
       }
       throw error;
