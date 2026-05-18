@@ -45,8 +45,8 @@ export const env = {
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
   googleRedirectUri:
     process.env.GOOGLE_REDIRECT_URI || 'http://localhost:4000/api/integrations/google/callback',
-  whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
-  whatsappAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || '',
+  whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '1037327522806922',
+  whatsappAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || 'EAAUrjIoX3BABRTFsdLJjE6OXBkSpetOLcymP6rfjlveoZCnXlStzLcHbZBuiSHiZALjkdOxZBTjpjoUSelIPk51w07c0FI8cCqZCFZAASetYxT0eC1e9nQTYUpldnmXK2cZB9AWj8EA9GneQZAjr0dZBylXMCIhzGYbZCs59QLJWaHIMpF9KEBzWpZAvz8XAuzLCR3zcSwU7uQ5Sq4YRpLGYquOQZCUP6wzTTqYhWJwjST3vQSbrYsjKEqs3suUhnH7VT4ZAS02veWtho1tctLRijtpne',
   isProduction: process.env.NODE_ENV === 'production',
 };
 
