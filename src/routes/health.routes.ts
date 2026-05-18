@@ -17,11 +17,14 @@ healthRouter.get('/test-whatsapp', async (req, res) => {
     if (!to)
       return res.status(400).json({ error: 'Falta el numero "to" en la query (ej: ?to=521...)' });
 
-    const result = await WhatsAppService.sendAppointmentReminder(
+    const result = await WhatsAppService.sendAppointmentConfirmation(
       to as string,
       'Cliente de Prueba',
-      'Hoy',
-      '17:00',
+      'Mi Negocio',
+      'Corte de Cabello',
+      '2026-05-20',
+      '15:30',
+      'http://localhost:4200/appointments/test-apt-id/confirm'
     );
     res.json({ success: true, message: 'WhatsApp enviado!', result });
   } catch (error: any) {

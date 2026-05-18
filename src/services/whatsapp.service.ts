@@ -36,19 +36,23 @@ export const WhatsAppService = {
     const url = `https://graph.facebook.com/v17.0/${env.whatsappPhoneNumberId}/messages`;
     const dateFormatted = formatWhatsAppDate(date);
 
+    // Extrae el ID de la cita de forma robusta y añade el sufijo de confirmación
+    const match = confirmLink ? confirmLink.match(/\/appointments\/([^/]+)/) : null;
+    const appointmentId = match ? match[1] : '';
+    const buttonValue = `${appointmentId}/confirm`;
+
     const data = {
       messaging_product: 'whatsapp',
       to: to,
       type: 'template',
       template: {
         name: 'appointment_reminder',
-        language: { code: 'es' },
+        language: { code: 'es_MX' },
         components: [
           {
             type: 'body',
             parameters: [
               { type: 'text', text: customerName },
-              { type: 'text', text: businessName },
               { type: 'text', text: serviceName },
               { type: 'text', text: dateFormatted },
               { type: 'text', text: time },
@@ -59,7 +63,7 @@ export const WhatsAppService = {
             sub_type: 'url',
             index: '0',
             parameters: [
-              { type: 'text', text: confirmLink.split('/').slice(-2, -1)[0] }, // Extract ID from link
+              { type: 'text', text: buttonValue },
             ],
           },
         ],
@@ -108,24 +112,15 @@ export const WhatsAppService = {
       type: 'template',
       template: {
         name: 'appointment_confirmation',
-        language: { code: 'es' },
+        language: { code: 'es_MX' },
         components: [
           {
             type: 'body',
             parameters: [
               { type: 'text', text: customerName },
-              { type: 'text', text: businessName },
               { type: 'text', text: serviceName },
               { type: 'text', text: dateFormatted },
               { type: 'text', text: time },
-            ],
-          },
-          {
-            type: 'button',
-            sub_type: 'url',
-            index: '0',
-            parameters: [
-              { type: 'text', text: confirmLink.split('/').slice(-2, -1)[0] }, // Extract ID from link
             ],
           },
         ],
