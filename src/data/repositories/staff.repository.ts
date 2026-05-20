@@ -60,9 +60,6 @@ interface StaffRow extends RowDataPacket {
   phone: string | null;
   is_active: number;
   has_custom_schedule: number;
-  has_custom_break: number;
-  break_start: string | null;
-  break_end: string | null;
   role_name: string;
 }
 
@@ -117,7 +114,6 @@ export async function listStaff(userId: string): Promise<StaffRecord[]> {
   const [rows] = await db.query<StaffRow[]>(
     `
       SELECT s.id, s.first_name, s.last_name, s.email, s.phone, s.is_active, s.has_custom_schedule,
-             s.has_custom_break, s.break_start, s.break_end,
              r.name AS role_name
       FROM ${q(tenantDbName)}.staff s
       JOIN ${q(tenantDbName)}.roles r ON r.id = s.role_id
@@ -131,7 +127,8 @@ export async function listStaff(userId: string): Promise<StaffRecord[]> {
   for (const row of rows) {
     const especialidades = await getStaffEspecialidades(tenantDbName, row.id);
     const horario = await getStaffSchedule(tenantDbName, row.id);
-    results.push(toStaffRecord(row, especialidades, horario, i));
+    const breaks = await getStaffBreaks(tenantDbName, row.id);
+    results.push(toStaffRecord(row, especialidades, horario, breaks, i));
     i++;
   }
 
@@ -162,9 +159,9 @@ export async function createStaff(
       `
         INSERT INTO ${q(tenantDbName)}.staff (
           role_id, first_name, last_name, email, phone, is_active, has_custom_schedule,
-          has_custom_break, break_start, break_end, created_at, updated_at
+          created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
       `,
       [
         roleId,
@@ -174,9 +171,6 @@ export async function createStaff(
         input.telefono?.trim() || null,
         isActive ? 1 : 0,
         hasCustomSchedule ? 1 : 0,
-        hasCustomBreak ? 1 : 0,
-        input.descansoDesde ? input.descansoDesde + ':00' : null,
-        input.descansoHasta ? input.descansoHasta + ':00' : null,
       ],
     );
 
@@ -192,15 +186,23 @@ export async function createStaff(
       await syncStaffSchedule(connection, tenantDbName, staffId, input.horario);
     }
 
+    // Insertar descanso
+    await connection.query(
+      `INSERT INTO ${q(tenantDbName)}.staff_break_settings (staff_id, break_enabled, break_start, break_end, effective_from, effective_to) VALUES (?, ?, ?, ?, ?, NULL)`,
+      [
+        staffId,
+        hasCustomBreak ? 1 : 0,
+        input.descansoDesde ? input.descansoDesde + ':00' : null,
+        input.descansoHasta ? input.descansoHasta + ':00' : null,
+        '2000-01-01'
+      ]
+    );
+
     await connection.commit();
 
     const totalStaff = await countStaff(tenantDbName);
     const newStaff = await getStaffById(tenantDbName, staffId, totalStaff - 1);
     
-    if (newStaff) {
-      await syncStaffRecurrentBlocks(userId, tenantDbName, newStaff);
-    }
-
     return newStaff;
   } catch (error) {
     await connection.rollback();
@@ -269,20 +271,7 @@ export async function updateStaff(
       params.push(input.horarioPropio ? 1 : 0);
     }
 
-    if (input.descansoPropio !== undefined) {
-      sets.push('has_custom_break = ?');
-      params.push(input.descansoPropio ? 1 : 0);
-    }
 
-    if (input.descansoDesde !== undefined) {
-      sets.push('break_start = ?');
-      params.push(input.descansoDesde ? input.descansoDesde + ':00' : null);
-    }
-
-    if (input.descansoHasta !== undefined) {
-      sets.push('break_end = ?');
-      params.push(input.descansoHasta ? input.descansoHasta + ':00' : null);
-    }
 
     if (sets.length > 0) {
       sets.push('updated_at = NOW()');
@@ -301,12 +290,60 @@ export async function updateStaff(
       await syncStaffSchedule(connection, tenantDbName, staffId, input.horario);
     }
 
+    // Versionar descansos
+    if (input.descansoPropio !== undefined || input.descansoDesde !== undefined || input.descansoHasta !== undefined) {
+      const d = new Date();
+      const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const yesterdayObj = new Date(d.getTime() - 24 * 60 * 60 * 1000);
+      const yesterdayStr = `${yesterdayObj.getFullYear()}-${String(yesterdayObj.getMonth() + 1).padStart(2, '0')}-${String(yesterdayObj.getDate()).padStart(2, '0')}`;
+
+      const [activeRows] = await connection.query<RowDataPacket[]>(
+        `SELECT id, break_enabled, break_start, break_end, effective_from FROM ${q(tenantDbName)}.staff_break_settings WHERE staff_id = ? AND effective_to IS NULL LIMIT 1`,
+        [staffId]
+      );
+
+      const active = activeRows.length > 0 ? activeRows[0] : null;
+      
+      const breakEnabled = input.descansoPropio !== undefined ? (input.descansoPropio ? 1 : 0) : (active ? active.break_enabled : 0);
+      const breakStart = input.descansoDesde !== undefined ? (input.descansoDesde ? input.descansoDesde + ':00' : null) : (active?.break_start ? active.break_start.substring(0, 5) + ':00' : null);
+      const breakEnd = input.descansoHasta !== undefined ? (input.descansoHasta ? input.descansoHasta + ':00' : null) : (active?.break_end ? active.break_end.substring(0, 5) + ':00' : null);
+
+      if (!active) {
+        await connection.query(
+          `INSERT INTO ${q(tenantDbName)}.staff_break_settings (staff_id, break_enabled, break_start, break_end, effective_from, effective_to) VALUES (?, ?, ?, ?, ?, NULL)`,
+          [staffId, breakEnabled, breakStart, breakEnd, todayStr]
+        );
+      } else {
+        const dbBreakEnabled = active.break_enabled;
+        const dbBreakStart = active.break_start ? active.break_start.substring(0, 5) + ':00' : null;
+        const dbBreakEnd = active.break_end ? active.break_end.substring(0, 5) + ':00' : null;
+
+        if (dbBreakEnabled !== breakEnabled || dbBreakStart !== breakStart || dbBreakEnd !== breakEnd) {
+          const effFromDate = active.effective_from instanceof Date 
+            ? active.effective_from.toISOString().split('T')[0] 
+            : String(active.effective_from).substring(0, 10);
+
+          if (effFromDate === todayStr) {
+            await connection.query(
+              `UPDATE ${q(tenantDbName)}.staff_break_settings SET break_enabled = ?, break_start = ?, break_end = ? WHERE id = ?`,
+              [breakEnabled, breakStart, breakEnd, active.id]
+            );
+          } else {
+            await connection.query(
+              `UPDATE ${q(tenantDbName)}.staff_break_settings SET effective_to = ? WHERE id = ?`,
+              [yesterdayStr, active.id]
+            );
+            await connection.query(
+              `INSERT INTO ${q(tenantDbName)}.staff_break_settings (staff_id, break_enabled, break_start, break_end, effective_from, effective_to) VALUES (?, ?, ?, ?, ?, NULL)`,
+              [staffId, breakEnabled, breakStart, breakEnd, todayStr]
+            );
+          }
+        }
+      }
+    }
+
     await connection.commit();
     const updatedStaff = await getStaffById(tenantDbName, staffId);
-    
-    if (updatedStaff) {
-      await syncStaffRecurrentBlocks(userId, tenantDbName, updatedStaff);
-    }
     
     return updatedStaff;
   } catch (error) {
@@ -367,7 +404,6 @@ async function getStaffById(
   const [rows] = await db.query<StaffRow[]>(
     `
       SELECT s.id, s.first_name, s.last_name, s.email, s.phone, s.is_active, s.has_custom_schedule,
-             s.has_custom_break, s.break_start, s.break_end,
              r.name AS role_name
       FROM ${q(tenantDbName)}.staff s
       JOIN ${q(tenantDbName)}.roles r ON r.id = s.role_id
@@ -381,6 +417,7 @@ async function getStaffById(
 
   const especialidades = await getStaffEspecialidades(tenantDbName, staffId);
   const horario = await getStaffSchedule(tenantDbName, staffId);
+  const breaks = await getStaffBreaks(tenantDbName, staffId);
 
   // Determine color index if not given
   if (colorIndex === undefined) {
@@ -391,7 +428,7 @@ async function getStaffById(
     if (colorIndex < 0) colorIndex = 0;
   }
 
-  return toStaffRecord(row, especialidades, horario, colorIndex);
+  return toStaffRecord(row, especialidades, horario, breaks, colorIndex);
 }
 
 async function getStaffEspecialidades(tenantDbName: string, staffId: string): Promise<string[]> {
@@ -409,6 +446,23 @@ async function getStaffEspecialidades(tenantDbName: string, staffId: string): Pr
   return rows.map((r) => r.service_name);
 }
 
+async function getStaffBreaks(tenantDbName: string, staffId: string): Promise<{ enabled: boolean; start: string | null; end: string | null }> {
+  const db = getControlPool();
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT break_enabled, break_start, break_end FROM ${q(tenantDbName)}.staff_break_settings WHERE staff_id = ? AND effective_to IS NULL LIMIT 1`,
+    [staffId]
+  );
+  if (rows.length > 0) {
+    const row = rows[0]!;
+    return {
+      enabled: row.break_enabled === 1,
+      start: row.break_start ? String(row.break_start).substring(0, 5) : null,
+      end: row.break_end ? String(row.break_end).substring(0, 5) : null,
+    };
+  }
+  return { enabled: false, start: null, end: null };
+}
+
 async function getStaffSchedule(
   tenantDbName: string,
   staffId: string,
@@ -418,7 +472,7 @@ async function getStaffSchedule(
     `
       SELECT id, day_of_week, start_time, end_time
       FROM ${q(tenantDbName)}.staff_schedules
-      WHERE staff_id = ?
+      WHERE staff_id = ? AND effective_to IS NULL
       ORDER BY day_of_week ASC
     `,
     [staffId],
@@ -484,21 +538,71 @@ async function syncStaffSchedule(
   staffId: string,
   horario: StaffScheduleDayRecord[],
 ): Promise<void> {
-  // Borrar las existentes
-  await connection.query(`DELETE FROM ${q(tenantDbName)}.staff_schedules WHERE staff_id = ?`, [
-    staffId,
-  ]);
+  const d = new Date();
+  const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const yesterdayObj = new Date(d.getTime() - 24 * 60 * 60 * 1000);
+  const yesterdayStr = `${yesterdayObj.getFullYear()}-${String(yesterdayObj.getMonth() + 1).padStart(2, '0')}-${String(yesterdayObj.getDate()).padStart(2, '0')}`;
 
   for (const h of horario) {
-    if (!h.activo) continue;
-
     const wd = WEEKDAY_MAP.find((w) => w.code === h.dia);
     if (!wd) continue;
 
-    await connection.query(
-      `INSERT INTO ${q(tenantDbName)}.staff_schedules (staff_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?)`,
-      [staffId, wd.dow, h.desde + ':00', h.hasta + ':00'],
+    const [activeRows] = await connection.query(
+      `SELECT id, start_time, end_time, effective_from FROM ${q(tenantDbName)}.staff_schedules WHERE staff_id = ? AND day_of_week = ? AND effective_to IS NULL LIMIT 1`,
+      [staffId, wd.dow]
     );
+
+    if (!h.activo) {
+      if (activeRows.length > 0) {
+        // Cerrar horario activo si ahora está inactivo
+        const active = activeRows[0];
+        const effFromDate = active.effective_from instanceof Date 
+            ? active.effective_from.toISOString().split('T')[0] 
+            : String(active.effective_from).substring(0, 10);
+        
+        if (effFromDate === todayStr) {
+          await connection.query(`DELETE FROM ${q(tenantDbName)}.staff_schedules WHERE id = ?`, [active.id]);
+        } else {
+          await connection.query(`UPDATE ${q(tenantDbName)}.staff_schedules SET effective_to = ? WHERE id = ?`, [yesterdayStr, active.id]);
+        }
+      }
+      continue;
+    }
+
+    const openTime = h.desde + ':00';
+    const closeTime = h.hasta + ':00';
+
+    if (activeRows.length > 0) {
+      const active = activeRows[0];
+      const dbStart = active.start_time.substring(0, 5) + ':00';
+      const dbEnd = active.end_time.substring(0, 5) + ':00';
+
+      if (dbStart === openTime && dbEnd === closeTime) {
+        continue;
+      }
+
+      const effFromDate = active.effective_from instanceof Date 
+            ? active.effective_from.toISOString().split('T')[0] 
+            : String(active.effective_from).substring(0, 10);
+
+      if (effFromDate === todayStr) {
+        await connection.query(
+          `UPDATE ${q(tenantDbName)}.staff_schedules SET start_time = ?, end_time = ? WHERE id = ?`,
+          [openTime, closeTime, active.id]
+        );
+      } else {
+        await connection.query(`UPDATE ${q(tenantDbName)}.staff_schedules SET effective_to = ? WHERE id = ?`, [yesterdayStr, active.id]);
+        await connection.query(
+          `INSERT INTO ${q(tenantDbName)}.staff_schedules (staff_id, day_of_week, start_time, end_time, effective_from, effective_to) VALUES (?, ?, ?, ?, ?, NULL)`,
+          [staffId, wd.dow, openTime, closeTime, todayStr]
+        );
+      }
+    } else {
+      await connection.query(
+        `INSERT INTO ${q(tenantDbName)}.staff_schedules (staff_id, day_of_week, start_time, end_time, effective_from, effective_to) VALUES (?, ?, ?, ?, ?, NULL)`,
+        [staffId, wd.dow, openTime, closeTime, '2000-01-01']
+      );
+    }
   }
 }
 
@@ -541,6 +645,7 @@ function toStaffRecord(
   row: StaffRow,
   especialidades: string[],
   horario: StaffScheduleDayRecord[],
+  breaks: { enabled: boolean; start: string | null; end: string | null },
   colorIndex: number,
 ): StaffRecord {
   const fullName = [row.first_name, row.last_name].filter(Boolean).join(' ');
@@ -553,98 +658,15 @@ function toStaffRecord(
     especialidades,
     horarioPropio: row.has_custom_schedule === 1,
     horario,
-    descansoPropio: row.has_custom_break === 1,
-    descansoDesde: row.break_start ? formatTimeToHHMM(row.break_start) : null,
-    descansoHasta: row.break_end ? formatTimeToHHMM(row.break_end) : null,
+    descansoPropio: breaks.enabled,
+    descansoDesde: breaks.start ? formatTimeToHHMM(breaks.start) : null,
+    descansoHasta: breaks.end ? formatTimeToHHMM(breaks.end) : null,
     activo: row.is_active === 1,
     initials: computeInitials(row.first_name, row.last_name),
     color: STAFF_COLORS[Math.abs(colorIndex) % STAFF_COLORS.length] || '#CCCCCC',
   };
 }
 
-export async function syncStaffRecurrentBlocks(
-  userId: string,
-  tenantDbName: string,
-  staffRecord: StaffRecord
-): Promise<void> {
-  const db = getControlPool();
-  
-  // 1. Delete future recurrent blocks for this staff
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString().split('T')[0];
 
-  await db.query(
-    `DELETE FROM ${q(tenantDbName)}.staff_blocks WHERE staff_id = ? AND is_recurrent = 1 AND DATE(start_at) >= ?`,
-    [staffRecord.id, todayStr]
-  );
-
-  // 2. Determine break settings
-  let breakStart: string | null = null;
-  let breakEnd: string | null = null;
-
-  if (staffRecord.descansoPropio && staffRecord.descansoDesde && staffRecord.descansoHasta) {
-    breakStart = staffRecord.descansoDesde.substring(0, 5);
-    breakEnd = staffRecord.descansoHasta.substring(0, 5);
-  } else {
-    const bs = await getBusinessSettings(userId);
-    if (bs?.breakEnabled && bs?.breakStart && bs?.breakEnd) {
-      breakStart = bs.breakStart;
-      breakEnd = bs.breakEnd;
-    }
-  }
-
-  if (!breakStart || !breakEnd) return;
-
-  // 3. Generate blocks for the next 90 days
-  const codeMap = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'];
-  const inserts: any[] = [];
-
-  for (let i = 0; i < 90; i++) {
-    const date = new Date(today.getTime() + i * 24 * 60 * 60 * 1000);
-    const dow = date.getDay();
-    const wdCode = codeMap[dow];
-
-    const diaHorario = staffRecord.horario?.find((h) => h.dia === wdCode);
-    if (!diaHorario || !diaHorario.activo) continue; // Doesn't work this day
-
-    const dateStr = date.toISOString().split('T')[0];
-    const startAt = `${dateStr} ${breakStart}:00`;
-    const endAt = `${dateStr} ${breakEnd}:00`;
-
-    inserts.push([
-      staffRecord.id,
-      'Descanso',
-      startAt,
-      endAt,
-      1 // is_recurrent
-    ]);
-  }
-
-  if (inserts.length > 0) {
-    await db.query(
-      `INSERT INTO ${q(tenantDbName)}.staff_blocks (staff_id, title, start_at, end_at, is_recurrent) VALUES ?`,
-      [inserts]
-    );
-  }
-}
-
-export async function syncAllStaffRecurrentBlocks(userId: string): Promise<void> {
-  const tenantDbName = await getTenantDbNameByUserId(userId);
-  if (!tenantDbName) return;
-
-  const db = getControlPool();
-  const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT id FROM ${q(tenantDbName)}.staff WHERE deleted_at IS NULL`
-  );
-
-  for (const row of rows) {
-    const staffId = row.id.toString();
-    const staffRecord = await getStaffById(tenantDbName, staffId);
-    if (staffRecord) {
-      await syncStaffRecurrentBlocks(userId, tenantDbName, staffRecord);
-    }
-  }
-}
 
 

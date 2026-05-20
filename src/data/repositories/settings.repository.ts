@@ -2,7 +2,6 @@ import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { getControlPool } from '../db';
 import { q } from '../utils';
 import { getTenantDbNameByUserId } from './user.repository';
-import { syncAllStaffRecurrentBlocks } from './staff.repository';
 
 export interface BusinessSettings {
   businessType: string;
@@ -131,8 +130,8 @@ export async function getBusinessSettings(userId: string, targetDate?: string): 
   );
 
   const historicalSchedules: HistoricalSchedule[] = historyRows.map((h) => {
-    const fromStr = h.effective_from instanceof Date ? h.effective_from.toISOString().split('T')[0] : String(h.effective_from).substring(0, 10);
-    const toStr = h.effective_to ? (h.effective_to instanceof Date ? h.effective_to.toISOString().split('T')[0] : String(h.effective_to).substring(0, 10)) : null;
+    const fromStr = h.effective_from instanceof Date ? h.effective_from.toISOString().substring(0, 10) : String(h.effective_from).substring(0, 10);
+    const toStr = h.effective_to ? (h.effective_to instanceof Date ? h.effective_to.toISOString().substring(0, 10) : String(h.effective_to).substring(0, 10)) : null;
 
     return {
       day: h.day_of_week,
@@ -144,7 +143,7 @@ export async function getBusinessSettings(userId: string, targetDate?: string): 
     };
   });
 
-  return {
+  const result: BusinessSettings = {
     businessType: row.business_type ?? '',
     phone: row.phone ?? '',
     address: row.address ?? '',
@@ -158,10 +157,34 @@ export async function getBusinessSettings(userId: string, targetDate?: string): 
     logoUrl: row.logo_url ?? '',
     schedules,
     historicalSchedules,
-    breakEnabled: row.break_enabled === 1,
-    breakStart: row.break_start ? String(row.break_start).substring(0, 5) : null,
-    breakEnd: row.break_end ? String(row.break_end).substring(0, 5) : null,
+    breakEnabled: false, // Default placeholders, will be overwritten by staff_break_settings
+    breakStart: null,
+    breakEnd: null,
   };
+
+  // Fetch global break settings
+  const [breakRows] = await db.query<RowDataPacket[]>(
+    `SELECT break_enabled, break_start, break_end FROM ${q(tenantDbName)}.staff_break_settings WHERE staff_id IS NULL AND effective_to IS NULL LIMIT 1`
+  );
+  if (breakRows.length > 0) {
+    const br = breakRows[0]!;
+    result.breakEnabled = br.break_enabled === 1;
+    result.breakStart = br.break_start ? String(br.break_start).substring(0, 5) : null;
+    result.breakEnd = br.break_end ? String(br.break_end).substring(0, 5) : null;
+  } else {
+    // Check if there is any history, if not, it's missing (fallback)
+    const [histBreakRows] = await db.query<RowDataPacket[]>(
+      `SELECT break_enabled, break_start, break_end FROM ${q(tenantDbName)}.staff_break_settings WHERE staff_id IS NULL ORDER BY effective_from DESC LIMIT 1`
+    );
+    if (histBreakRows.length > 0) {
+      const br = histBreakRows[0]!;
+      result.breakEnabled = br.break_enabled === 1;
+      result.breakStart = br.break_start ? String(br.break_start).substring(0, 5) : null;
+      result.breakEnd = br.break_end ? String(br.break_end).substring(0, 5) : null;
+    }
+  }
+
+  return result;
 }
 
 export async function upsertBusinessSettings(
@@ -215,8 +238,8 @@ export async function upsertBusinessSettings(
     await connection.query(
       `
         INSERT INTO ${q(tenantDbName)}.business_settings
-          (id, business_type, phone, address, street, ext_number, int_number, neighborhood, city, state, zip_code, logo_url, break_enabled, break_start, break_end, updated_at)
-        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+          (id, business_type, phone, address, street, ext_number, int_number, neighborhood, city, state, zip_code, logo_url, updated_at)
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         ON DUPLICATE KEY UPDATE
           business_type = VALUES(business_type),
           phone = VALUES(phone),
@@ -229,9 +252,6 @@ export async function upsertBusinessSettings(
           state = VALUES(state),
           zip_code = VALUES(zip_code),
           logo_url = VALUES(logo_url),
-          break_enabled = VALUES(break_enabled),
-          break_start = VALUES(break_start),
-          break_end = VALUES(break_end),
           updated_at = NOW()
       `,
       [
@@ -246,9 +266,6 @@ export async function upsertBusinessSettings(
         next.state,
         next.zipCode,
         next.logoUrl,
-        next.breakEnabled ? 1 : 0,
-        next.breakStart ? next.breakStart + ':00' : null,
-        next.breakEnd ? next.breakEnd + ':00' : null,
       ],
     );
 
@@ -315,16 +332,57 @@ export async function upsertBusinessSettings(
       }
     }
 
-    await connection.commit();
-    
-    // Sync all staff blocks if break settings changed
-    if (
-      next.breakEnabled !== current.breakEnabled ||
-      next.breakStart !== current.breakStart ||
-      next.breakEnd !== current.breakEnd
-    ) {
-      await syncAllStaffRecurrentBlocks(userId);
+    // Guardar/Versionar global breaks en staff_break_settings (staff_id IS NULL)
+    {
+      const d = new Date();
+      const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const yesterdayObj = new Date(d.getTime() - 24 * 60 * 60 * 1000);
+      const yesterdayStr = `${yesterdayObj.getFullYear()}-${String(yesterdayObj.getMonth() + 1).padStart(2, '0')}-${String(yesterdayObj.getDate()).padStart(2, '0')}`;
+
+      const breakEnabled = next.breakEnabled ? 1 : 0;
+      const breakStart = next.breakStart ? next.breakStart + ':00' : null;
+      const breakEnd = next.breakEnd ? next.breakEnd + ':00' : null;
+
+      const [activeRows] = await connection.query<RowDataPacket[]>(
+        `SELECT id, break_enabled, break_start, break_end, effective_from FROM ${q(tenantDbName)}.staff_break_settings WHERE staff_id IS NULL AND effective_to IS NULL LIMIT 1`
+      );
+
+      if (activeRows.length > 0) {
+        const active = activeRows[0]!;
+        const dbBreakEnabled = active.break_enabled;
+        const dbBreakStart = active.break_start ? active.break_start.substring(0, 5) + ':00' : null;
+        const dbBreakEnd = active.break_end ? active.break_end.substring(0, 5) + ':00' : null;
+
+        if (dbBreakEnabled !== breakEnabled || dbBreakStart !== breakStart || dbBreakEnd !== breakEnd) {
+          const effFromDate = active.effective_from instanceof Date 
+            ? active.effective_from.toISOString().split('T')[0] 
+            : String(active.effective_from).substring(0, 10);
+
+          if (effFromDate === todayStr) {
+            await connection.query(
+              `UPDATE ${q(tenantDbName)}.staff_break_settings SET break_enabled = ?, break_start = ?, break_end = ? WHERE id = ?`,
+              [breakEnabled, breakStart, breakEnd, active.id]
+            );
+          } else {
+            await connection.query(
+              `UPDATE ${q(tenantDbName)}.staff_break_settings SET effective_to = ? WHERE id = ?`,
+              [yesterdayStr, active.id]
+            );
+            await connection.query(
+              `INSERT INTO ${q(tenantDbName)}.staff_break_settings (staff_id, break_enabled, break_start, break_end, effective_from, effective_to) VALUES (NULL, ?, ?, ?, ?, NULL)`,
+              [breakEnabled, breakStart, breakEnd, todayStr]
+            );
+          }
+        }
+      } else {
+        await connection.query(
+          `INSERT INTO ${q(tenantDbName)}.staff_break_settings (staff_id, break_enabled, break_start, break_end, effective_from, effective_to) VALUES (NULL, ?, ?, ?, ?, NULL)`,
+          [breakEnabled, breakStart, breakEnd, '2000-01-01']
+        );
+      }
     }
+
+    await connection.commit();
 
     return getBusinessSettings(userId);
   } catch (error) {
