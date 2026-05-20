@@ -7,9 +7,9 @@ export const authRouter = Router();
 
 authRouter.post('/login', authLimiter, AuthController.login);
 authRouter.post('/register', authLimiter, AuthController.register);
-authRouter.post('/verify-email', AuthController.verifyEmail);
+authRouter.post('/verify-email', authLimiter, AuthController.verifyEmail);
 authRouter.post('/refresh', AuthController.refreshTokens);
-authRouter.post('/resend-verification', AuthController.resendVerification);
+authRouter.post('/resend-verification', authLimiter, AuthController.resendVerification);
 authRouter.get('/me', requireAuth, AuthController.getMe);
 authRouter.post('/forgot-password', authLimiter, AuthController.forgotPassword);
-authRouter.post('/reset-password', AuthController.resetPassword);
+authRouter.post('/reset-password', authLimiter, AuthController.resetPassword);

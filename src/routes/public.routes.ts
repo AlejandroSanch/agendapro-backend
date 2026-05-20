@@ -4,12 +4,13 @@ import {
   confirmAppointmentPublicGet,
   getAppointmentPublicDetails,
 } from '../controllers/public.controller';
+import { globalLimiter, authLimiter } from '../middleware/rate-limit';
 
 const router = Router();
 
 // Rutas públicas para el flujo de WhatsApp y Email
-router.get('/appointments/:id', getAppointmentPublicDetails);
-router.post('/appointments/:id/confirm', confirmAppointmentPublic);
-router.get('/appointments/:id/confirm', confirmAppointmentPublicGet); // Confirmación desde email (GET)
+router.get('/appointments/:id', globalLimiter, getAppointmentPublicDetails);
+router.post('/appointments/:id/confirm', authLimiter, confirmAppointmentPublic);
+router.get('/appointments/:id/confirm', authLimiter, confirmAppointmentPublicGet); // Confirmación desde email (GET)
 
 export { router as publicRouter };

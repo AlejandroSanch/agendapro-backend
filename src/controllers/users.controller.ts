@@ -43,12 +43,6 @@ export const UsersController = {
   }),
 
   updatePlan: asyncWrapper(async (req: Request, res: Response) => {
-    const user = getAuthUser(req);
-    const data = updatePlanSchema.parse(req.body);
-    const updatedUser = await setUserPlan(user.id, data.plan);
-
-    if (!updatedUser) throw new ApiError(404, 'Usuario no encontrado.');
-
-    res.json({ user: updatedUser });
+    throw new ApiError(501, 'La actualización de planes directa no está habilitada. Contacte soporte.');
   }),
 };

@@ -100,6 +100,9 @@ async function ensureAllTenantSchemas(): Promise<void> {
  * Crea la base de datos para el tenant si no existe, y corre el motor dinámico de Umzug.
  */
 export async function ensureTenantSchema(tenantDbName: string): Promise<void> {
+  if (!/^[a-z0-9_]+$/.test(tenantDbName)) {
+    throw new Error(`Invalid tenant database name: ${tenantDbName}`);
+  }
   const db = getControlPool();
 
   await db.query(

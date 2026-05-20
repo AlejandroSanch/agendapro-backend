@@ -22,15 +22,15 @@ declare global {
 }
 
 export function issueAccessToken(userId: string, email: string): string {
-  return jwt.sign({ sub: userId, email }, env.jwtSecret, { expiresIn: '1h' });
+  return jwt.sign({ sub: userId, email }, env.jwtSecret, { expiresIn: '1h', algorithm: 'HS256' });
 }
 
 export function issueRefreshToken(userId: string): string {
-  return jwt.sign({ sub: userId }, env.jwtRefreshSecret, { expiresIn: '30d' });
+  return jwt.sign({ sub: userId }, env.jwtRefreshSecret, { expiresIn: '30d', algorithm: 'HS256' });
 }
 
 export function verifyRefreshToken(token: string): RefreshTokenPayload {
-  return jwt.verify(token, env.jwtRefreshSecret) as RefreshTokenPayload;
+  return jwt.verify(token, env.jwtRefreshSecret, { algorithms: ['HS256'] }) as RefreshTokenPayload;
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -51,7 +51,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    const payload = jwt.verify(token, env.jwtSecret) as AuthTokenPayload;
+    const payload = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] }) as AuthTokenPayload;
     const user = await findUserById(payload.sub);
     if (!user) {
       res.status(401).json({ error: 'Usuario no encontrado.' });
