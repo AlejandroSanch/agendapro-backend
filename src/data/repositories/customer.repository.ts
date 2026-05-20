@@ -166,6 +166,17 @@ async function ensureCustomersSchema(tenantDbName: string): Promise<void> {
            AFTER birth_date`,
     );
   }
+
+  const [delRows] = await db.query<RowDataPacket[]>(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'customers' AND COLUMN_NAME = 'deleted_at'`,
+    [tenantDbName],
+  );
+
+  if ((delRows as RowDataPacket[]).length === 0) {
+    await db.query(
+      `ALTER TABLE ${q(tenantDbName)}.customers ADD COLUMN deleted_at DATETIME NULL DEFAULT NULL AFTER updated_at`,
+    );
+  }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -183,7 +194,7 @@ export async function listCustomers(
 
   // 1. Get total count
   const [countRows] = await db.query<RowDataPacket[]>(
-    `SELECT COUNT(*) as total FROM ${q(tenantDbName)}.customers`,
+    `SELECT COUNT(*) as total FROM ${q(tenantDbName)}.customers WHERE deleted_at IS NULL`,
   );
   const total = Number(countRows[0]?.total ?? 0);
 
@@ -197,6 +208,7 @@ export async function listCustomers(
       SELECT id, first_name, last_name, phone, email, birth_date, sex, notes, is_active,
              DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
       FROM ${q(tenantDbName)}.customers
+      WHERE deleted_at IS NULL
       ORDER BY first_name ASC, last_name ASC
       LIMIT ? OFFSET ?
     `,
@@ -228,7 +240,7 @@ export async function getCustomerById(
       SELECT id, first_name, last_name, phone, email, birth_date, sex, notes, is_active,
              DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
       FROM ${q(tenantDbName)}.customers
-      WHERE id = ? LIMIT 1
+      WHERE id = ? AND deleted_at IS NULL LIMIT 1
     `,
     [customerId],
   );
@@ -317,7 +329,7 @@ export async function updateCustomer(
   params.push(customerId);
 
   const [result] = await db.query<ResultSetHeader>(
-    `UPDATE ${q(tenantDbName)}.customers SET ${setParts.join(', ')} WHERE id = ?`,
+    `UPDATE ${q(tenantDbName)}.customers SET ${setParts.join(', ')} WHERE id = ? AND deleted_at IS NULL`,
     params,
   );
 
@@ -351,25 +363,9 @@ export async function deleteCustomer(
 
   const db = getControlPool();
 
-  // Verificar si tiene citas asociadas
-  const [citaRows] = await db.query<RowDataPacket[]>(
-    `SELECT COUNT(*) AS total FROM ${q(tenantDbName)}.appointments WHERE customer_id = ?`,
-    [customerId],
-  );
-  const hasCitas = Number(citaRows[0]?.total ?? 0) > 0;
-
-  if (hasCitas) {
-    // Si tiene citas, marcar inactivo en lugar de eliminar
-    const [result] = await db.query<ResultSetHeader>(
-      `UPDATE ${q(tenantDbName)}.customers SET is_active = 0, updated_at = NOW() WHERE id = ?`,
-      [customerId],
-    );
-    return { deleted: false, deactivated: result.affectedRows > 0 };
-  }
-
   const [result] = await db.query<ResultSetHeader>(
-    `DELETE FROM ${q(tenantDbName)}.customers WHERE id = ?`,
+    `UPDATE ${q(tenantDbName)}.customers SET deleted_at = NOW(), is_active = 0 WHERE id = ?`,
     [customerId],
   );
-  return { deleted: result.affectedRows > 0, deactivated: false };
+  return { deleted: true, deactivated: false };
 }

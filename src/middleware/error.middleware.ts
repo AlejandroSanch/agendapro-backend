@@ -12,7 +12,9 @@ export function globalErrorHandler(
 ): void {
   // Manejo elegante de Validación en Zod
   if (err instanceof z.ZodError) {
-    const message = err.issues?.[0]?.message || (err as any).errors?.[0]?.message || err.message;
+    // Si hay un mensaje explícito definido en el schema lo usamos, si no, uno genérico para no filtrar el stack/rutas
+    const issueMessage = err.issues?.[0]?.message;
+    const message = issueMessage !== 'Required' && issueMessage ? issueMessage : 'Error de validación en los datos enviados.';
     res.status(400).json({ error: message, code: 'VALIDATION_ERROR' });
     return;
   }

@@ -22,4 +22,5 @@ export const updateProductSchema = createProductSchema.partial();
 
 export const createProductBulkSchema = z
   .array(createProductSchema)
-  .min(1, 'La lista de productos no puede estar vacía');
+  .min(1, 'La lista de productos no puede estar vacía')
+  .max(500, 'Máximo 500 productos por petición');

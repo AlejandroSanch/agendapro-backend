@@ -16,23 +16,36 @@ export interface SystemNotification {
  */
 export async function listSystemNotifications(
   tenantDb: string,
-  limit = 50,
-): Promise<SystemNotification[]> {
+  pagination?: { page?: number; limit?: number },
+): Promise<{ data: SystemNotification[]; total: number }> {
   const db = getControlPool();
+
+  const [countRows] = await db.query<RowDataPacket[]>(
+    `SELECT COUNT(*) as total FROM \`${tenantDb}\`.system_notifications`,
+  );
+  const total = Number(countRows[0]?.total ?? 0);
+
+  const limit = Math.min(pagination?.limit || 50, 200);
+  const page = Math.max(pagination?.page || 1, 1);
+  const offset = (page - 1) * limit;
+
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT * FROM \`${tenantDb}\`.system_notifications ORDER BY created_at DESC LIMIT ?`,
-    [limit],
+    `SELECT * FROM \`${tenantDb}\`.system_notifications ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    [limit, offset],
   );
 
-  return rows.map((r) => ({
-    id: String(r.id),
-    type: r.type,
-    title: r.title,
-    message: r.message,
-    is_read: !!r.is_read,
-    metadata: r.metadata,
-    created_at: r.created_at,
-  }));
+  return {
+    data: rows.map((r) => ({
+      id: String(r.id),
+      type: r.type,
+      title: r.title,
+      message: r.message,
+      is_read: !!r.is_read,
+      metadata: r.metadata,
+      created_at: r.created_at,
+    })),
+    total,
+  };
 }
 
 /**

@@ -20,7 +20,7 @@ export async function ensureControlDatabaseAndPool(): Promise<void> {
     password: env.mysqlPassword,
     waitForConnections: true,
     connectionLimit: 1,
-    queueLimit: 0,
+    queueLimit: 50,
   });
 
   try {
@@ -39,7 +39,7 @@ export async function ensureControlDatabaseAndPool(): Promise<void> {
     database: env.mysqlDatabase,
     waitForConnections: true,
     connectionLimit: Math.max(1, env.mysqlConnectionLimit),
-    queueLimit: 0,
+    queueLimit: 50,
     dateStrings: true,
   });
 }

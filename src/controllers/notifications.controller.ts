@@ -10,6 +10,7 @@ import {
   markAllNotificationsAsRead,
   deleteNotification,
 } from '../data/repositories/notification.repository';
+import { paginationQuerySchema } from '../validators/common.validators';
 
 const idParamSchema = z.object({
   id: z.string().min(1),
@@ -21,10 +22,22 @@ export const NotificationsController = {
    */
   list: asyncWrapper(async (req: Request, res: Response) => {
     const user = getAuthUser(req);
+    const query = paginationQuerySchema.parse(req.query);
 
     const tenantDb = tenantDbNameFromUserId(user.id);
-    const notifications = await listSystemNotifications(tenantDb);
-    res.json({ notifications });
+    const { data, total } = await listSystemNotifications(tenantDb, {
+      page: query.page,
+      limit: query.limit,
+    });
+    
+    res.json({
+      notifications: data,
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total,
+      },
+    });
   }),
 
   /**

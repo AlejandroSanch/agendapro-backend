@@ -3,6 +3,37 @@ import { env } from '../config/env';
 import { getControlPool } from '../data/db';
 import { RowDataPacket } from 'mysql2/promise';
 import { logger } from '../utils/logger';
+import crypto from 'crypto';
+
+const ALGORITHM = 'aes-256-gcm';
+// Derivamos una llave de 32 bytes usando el JWT secret para evitar añadir más variables de entorno por ahora
+const getEncryptionKey = () => crypto.scryptSync(env.jwtSecret, 'salt', 32);
+
+function encryptToken(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv(ALGORITHM, getEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`;
+}
+
+function decryptToken(text: string | null): string | null {
+  if (!text) return null;
+  try {
+    const parts = text.split(':');
+    if (parts.length !== 3) return text; // Backward compatibility with unencrypted tokens
+    const iv = Buffer.from(parts[0] as string, 'hex');
+    const authTag = Buffer.from(parts[1] as string, 'hex');
+    const encrypted = Buffer.from(parts[2] as string, 'hex');
+    const decipher = crypto.createDecipheriv(ALGORITHM, getEncryptionKey(), iv);
+    decipher.setAuthTag(authTag);
+    return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
+  } catch (err) {
+    logger.error('Error desencriptando token OAuth, intentando fallback en texto plano');
+    return text;
+  }
+}
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar.events'];
 
@@ -54,8 +85,8 @@ export const GoogleCalendarService = {
     `,
       [
         userId,
-        tokens.access_token,
-        tokens.refresh_token || null,
+        encryptToken(tokens.access_token),
+        encryptToken(tokens.refresh_token || null),
         tokens.expiry_date ? Math.floor(tokens.expiry_date / 1000) : null,
       ],
     );
@@ -78,8 +109,8 @@ export const GoogleCalendarService = {
     );
 
     client.setCredentials({
-      access_token: integration.access_token,
-      refresh_token: integration.refresh_token,
+      access_token: decryptToken(integration.access_token),
+      refresh_token: decryptToken(integration.refresh_token),
       // Date from DB might be string or Date object depending on mysql2 config, assume Date object or string parsable by Date
       expiry_date: integration.expires_at ? new Date(integration.expires_at).getTime() : null,
     });
@@ -90,7 +121,7 @@ export const GoogleCalendarService = {
         await db.query(
           `UPDATE tenant_integrations SET access_token = ?, expires_at = FROM_UNIXTIME(?) WHERE user_id = ? AND provider = 'google_calendar'`,
           [
-            tokens.access_token,
+            encryptToken(tokens.access_token),
             tokens.expiry_date ? Math.floor(tokens.expiry_date / 1000) : null,
             userId,
           ],
@@ -99,7 +130,7 @@ export const GoogleCalendarService = {
       if (tokens.refresh_token) {
         await db.query(
           `UPDATE tenant_integrations SET refresh_token = ? WHERE user_id = ? AND provider = 'google_calendar'`,
-          [tokens.refresh_token, userId],
+          [encryptToken(tokens.refresh_token), userId],
         );
       }
     });

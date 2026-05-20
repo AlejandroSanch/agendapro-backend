@@ -9,6 +9,7 @@ export interface StaffBlock {
   title: string;
   startAt: string;
   endAt: string;
+  isRecurrent?: number;
 }
 
 export interface CreateStaffBlockInput {

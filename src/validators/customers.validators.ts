@@ -23,22 +23,22 @@ export const customerIdParamSchema = z.object({
 });
 
 export const createCustomerSchema = z.object({
-  nombre: z.string().trim().min(1, 'nombre es requerido.'),
-  telefono: z.string().trim().optional().default(''),
+  nombre: z.string().trim().min(1, 'nombre es requerido.').max(255),
+  telefono: z.string().trim().max(50).optional().default(''),
   email: emailField.optional().default(''),
   fechaNacimiento: fechaField.optional().default(''),
   sexo: z.enum(sexos, { message: 'sexo inválido.' }).optional().default(''),
-  notas: z.string().trim().optional().default(''),
+  notas: z.string().trim().max(2000).optional().default(''),
 });
 
 export const updateCustomerSchema = z
   .object({
-    nombre: z.string().trim().min(1, 'nombre es requerido.').optional(),
-    telefono: z.string().trim().optional(),
+    nombre: z.string().trim().min(1, 'nombre es requerido.').max(255).optional(),
+    telefono: z.string().trim().max(50).optional(),
     email: emailField.optional(),
     fechaNacimiento: fechaField.optional(),
     sexo: z.enum(sexos, { message: 'sexo inválido.' }).optional(),
-    notas: z.string().trim().optional(),
+    notas: z.string().trim().max(2000).optional(),
   })
   .refine((data) => Object.values(data).some((v) => v !== undefined), {
     message: 'No hay campos para actualizar.',

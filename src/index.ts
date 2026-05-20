@@ -37,11 +37,16 @@ app.use(helmet());
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || env.corsOrigins.includes(origin)) {
+      // Permitir sin origen solo en desarrollo (para Postman/scripts) o si está en la lista blanca
+      if (!origin && !env.isProduction) {
         callback(null, true);
         return;
       }
-      callback(new Error(`CORS blocked for origin: ${origin}`));
+      if (origin && env.corsOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`CORS blocked for origin: ${origin || 'none'}`));
     },
     credentials: false,
   }),

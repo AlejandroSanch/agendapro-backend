@@ -65,6 +65,16 @@ export async function createSale(userId: string, input: CheckoutInput): Promise<
       );
 
       if (item.type === 'product') {
+        // Verificar stock con bloqueo por fila (FOR UPDATE)
+        const [prodRows] = await connection.query<RowDataPacket[]>(
+          `SELECT stock_quantity FROM ${q(tenantDbName)}.products WHERE id = ? FOR UPDATE`,
+          [item.id],
+        );
+        const currentStock = prodRows[0]?.stock_quantity ?? 0;
+        if (currentStock < item.quantity) {
+          throw new Error(`Stock insuficiente para el producto ${item.id}. Disponible: ${currentStock}, Requerido: ${item.quantity}`);
+        }
+
         // Descontar stock
         await connection.query(
           `UPDATE ${q(tenantDbName)}.products SET stock_quantity = stock_quantity - ? WHERE id = ?`,

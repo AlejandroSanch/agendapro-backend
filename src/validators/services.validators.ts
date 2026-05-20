@@ -6,31 +6,33 @@ export const serviceIdParamSchema = z.object({
 });
 
 export const createServiceSchema = z.object({
-  nombre: z.string().trim().min(1, 'nombre es requerido.'),
+  nombre: z.string().trim().min(1, 'nombre es requerido.').max(255),
   categoria: z
     .string()
     .trim()
+    .max(100)
     .optional()
     .default('general')
     .transform((v) => v || 'general'),
   duracionMin: z.number().int().positive('duracionMin debe ser mayor a 0.'),
   precio: z.number().min(0, 'precio debe ser un numero >= 0.'),
-  descripcion: z.string().trim().optional().default(''),
+  descripcion: z.string().trim().max(2000).optional().default(''),
   activo: z.boolean().optional().default(true),
   orden: z.number().int().min(0, 'orden debe ser un numero >= 0.').optional(),
 });
 
 export const updateServiceSchema = z
   .object({
-    nombre: z.string().trim().min(1, 'nombre es requerido.').optional(),
+    nombre: z.string().trim().min(1, 'nombre es requerido.').max(255).optional(),
     categoria: z
       .string()
       .trim()
+      .max(100)
       .optional()
       .transform((v) => (v === undefined ? undefined : v || 'general')),
     duracionMin: z.number().int().positive('duracionMin debe ser mayor a 0.').optional(),
     precio: z.number().min(0, 'precio debe ser un numero >= 0.').optional(),
-    descripcion: z.string().trim().optional(),
+    descripcion: z.string().trim().max(2000).optional(),
     activo: z.boolean().optional(),
     orden: z.number().int().min(0, 'orden debe ser un numero >= 0.').optional(),
   })
