@@ -17,6 +17,7 @@ export interface BusinessSettings {
   zipCode: string;
   logoUrl: string;
   schedules: BusinessSchedule[];
+  historicalSchedules?: HistoricalSchedule[];
   breakEnabled: boolean;
   breakStart: string | null;
   breakEnd: string | null;
@@ -27,6 +28,11 @@ export interface BusinessSchedule {
   open: boolean;
   from: string;
   to: string;
+}
+
+export interface HistoricalSchedule extends BusinessSchedule {
+  effectiveFrom: string;
+  effectiveTo: string | null;
 }
 
 export interface StaffRecord {
@@ -63,7 +69,7 @@ export async function setOnboardingCompleted(userId: string): Promise<void> {
   ]);
 }
 
-export async function getBusinessSettings(userId: string): Promise<BusinessSettings | null> {
+export async function getBusinessSettings(userId: string, targetDate?: string): Promise<BusinessSettings | null> {
   const tenantDbName = await getTenantDbNameByUserId(userId);
   if (!tenantDbName) return null;
 
@@ -75,17 +81,68 @@ export async function getBusinessSettings(userId: string): Promise<BusinessSetti
   const row = rows[0];
   if (!row) return null;
 
-  // Cargar schedules desde la nueva tabla
-  const [hoursRows] = await db.query<RowDataPacket[]>(
-    `SELECT day_of_week, open_time, close_time, is_closed FROM ${q(tenantDbName)}.business_hours ORDER BY day_of_week ASC`,
-  );
+  // Cargar schedules desde la nueva tabla, opcionalmente por fecha
+  let query = `SELECT day_of_week, open_time, close_time, is_closed FROM ${q(tenantDbName)}.business_hours`;
+  const params: any[] = [];
+  
+  if (targetDate) {
+    query += ` WHERE effective_from <= ? AND (effective_to IS NULL OR effective_to >= ?) ORDER BY day_of_week ASC`;
+    params.push(targetDate, targetDate);
+  } else {
+    query += ` WHERE effective_to IS NULL ORDER BY day_of_week ASC`;
+  }
 
-  const schedules: BusinessSchedule[] = hoursRows.map((h) => ({
+  const [hoursRows] = await db.query<RowDataPacket[]>(query, params);
+
+  let schedulesRows: any[] = hoursRows;
+  // Fallback si no hay registros activos para esa fecha histórica
+  if (schedulesRows.length === 0) {
+    const [fallbackRows] = await db.query<RowDataPacket[]>(
+      `SELECT day_of_week, open_time, close_time, is_closed FROM ${q(tenantDbName)}.business_hours ORDER BY effective_from ASC, day_of_week ASC`
+    );
+    const map: Record<number, any> = {};
+    for (const r of fallbackRows) {
+      if (map[r.day_of_week] === undefined) {
+        map[r.day_of_week] = r;
+      }
+    }
+    schedulesRows = Object.values(map);
+  }
+
+  // Fallback secundario con defaults
+  if (schedulesRows.length === 0) {
+    schedulesRows = Array.from({ length: 7 }, (_, i) => ({
+      day_of_week: i,
+      open_time: '09:00:00',
+      close_time: '18:00:00',
+      is_closed: i === 6 ? 1 : 0,
+    }));
+  }
+
+  const schedules: BusinessSchedule[] = schedulesRows.map((h) => ({
     day: h.day_of_week,
     open: h.is_closed === 0,
     from: h.open_time ? h.open_time.substring(0, 5) : '09:00',
     to: h.close_time ? h.close_time.substring(0, 5) : '18:00',
   }));
+
+  const [historyRows] = await db.query<RowDataPacket[]>(
+    `SELECT day_of_week, open_time, close_time, is_closed, effective_from, effective_to FROM ${q(tenantDbName)}.business_hours ORDER BY effective_from ASC, day_of_week ASC`
+  );
+
+  const historicalSchedules: HistoricalSchedule[] = historyRows.map((h) => {
+    const fromStr = h.effective_from instanceof Date ? h.effective_from.toISOString().split('T')[0] : String(h.effective_from).substring(0, 10);
+    const toStr = h.effective_to ? (h.effective_to instanceof Date ? h.effective_to.toISOString().split('T')[0] : String(h.effective_to).substring(0, 10)) : null;
+
+    return {
+      day: h.day_of_week,
+      open: h.is_closed === 0,
+      from: h.open_time ? h.open_time.substring(0, 5) : '09:00',
+      to: h.close_time ? h.close_time.substring(0, 5) : '18:00',
+      effectiveFrom: fromStr,
+      effectiveTo: toStr,
+    };
+  });
 
   return {
     businessType: row.business_type ?? '',
@@ -100,6 +157,7 @@ export async function getBusinessSettings(userId: string): Promise<BusinessSetti
     zipCode: row.zip_code ?? '',
     logoUrl: row.logo_url ?? '',
     schedules,
+    historicalSchedules,
     breakEnabled: row.break_enabled === 1,
     breakStart: row.break_start ? String(row.break_start).substring(0, 5) : null,
     breakEnd: row.break_end ? String(row.break_end).substring(0, 5) : null,
@@ -194,14 +252,66 @@ export async function upsertBusinessSettings(
       ],
     );
 
-    // Save Schedules to new table
-    await connection.query(`DELETE FROM ${q(tenantDbName)}.business_hours`);
+    // Guardar/Versionar horarios en business_hours
     if (next.schedules.length > 0) {
+      const d = new Date();
+      const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const yesterdayObj = new Date(d.getTime() - 24 * 60 * 60 * 1000);
+      const yesterdayStr = `${yesterdayObj.getFullYear()}-${String(yesterdayObj.getMonth() + 1).padStart(2, '0')}-${String(yesterdayObj.getDate()).padStart(2, '0')}`;
+
       for (const sch of next.schedules) {
-        await connection.query(
-          `INSERT INTO ${q(tenantDbName)}.business_hours (day_of_week, open_time, close_time, is_closed) VALUES (?, ?, ?, ?)`,
-          [sch.day, sch.from || '00:00', sch.to || '00:00', sch.open ? 0 : 1],
+        const day = sch.day;
+        const openTime = sch.from || '09:00';
+        const closeTime = sch.to || '18:00';
+        const isClosed = sch.open ? 0 : 1;
+
+        // Buscar si ya existe un horario activo actual
+        const [activeRows] = await connection.query<RowDataPacket[]>(
+          `SELECT id, open_time, close_time, is_closed, effective_from FROM ${q(tenantDbName)}.business_hours WHERE day_of_week = ? AND effective_to IS NULL LIMIT 1`,
+          [day]
         );
+
+        if (activeRows.length > 0) {
+          const active = activeRows[0]!;
+          const dbOpen = active.open_time ? active.open_time.substring(0, 5) : '09:00';
+          const dbClose = active.close_time ? active.close_time.substring(0, 5) : '18:00';
+          const dbIsClosed = active.is_closed;
+
+          // Si la configuración es idéntica, no hacemos cambios
+          if (dbOpen === openTime && dbClose === closeTime && dbIsClosed === isClosed) {
+            continue;
+          }
+
+          // Convertir fecha de DB a string YYYY-MM-DD
+          const effFromDate = active.effective_from instanceof Date 
+            ? active.effective_from.toISOString().split('T')[0] 
+            : String(active.effective_from).substring(0, 10);
+
+          if (effFromDate === todayStr) {
+            // Si el horario activo empezó hoy, lo sobreescribimos directamente
+            await connection.query(
+              `UPDATE ${q(tenantDbName)}.business_hours SET open_time = ?, close_time = ?, is_closed = ? WHERE id = ?`,
+              [openTime, closeTime, isClosed, active.id]
+            );
+          } else {
+            // Cerramos el horario anterior (ayer)
+            await connection.query(
+              `UPDATE ${q(tenantDbName)}.business_hours SET effective_to = ? WHERE id = ?`,
+              [yesterdayStr, active.id]
+            );
+            // Insertamos la nueva versión activa desde hoy
+            await connection.query(
+              `INSERT INTO ${q(tenantDbName)}.business_hours (day_of_week, open_time, close_time, is_closed, effective_from, effective_to) VALUES (?, ?, ?, ?, ?, NULL)`,
+              [day, openTime, closeTime, isClosed, todayStr]
+            );
+          }
+        } else {
+          // Si no hay horario activo (onboarding inicial), insertamos uno desde el pasado o hoy
+          await connection.query(
+            `INSERT INTO ${q(tenantDbName)}.business_hours (day_of_week, open_time, close_time, is_closed, effective_from, effective_to) VALUES (?, ?, ?, ?, ?, NULL)`,
+            [day, openTime, closeTime, isClosed, '2000-01-01']
+          );
+        }
       }
     }
 

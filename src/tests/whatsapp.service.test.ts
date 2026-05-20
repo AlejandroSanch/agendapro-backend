@@ -30,7 +30,7 @@ describe('WhatsAppService', () => {
   describe('sendAppointmentReminder', () => {
     it('debería enviar un recordatorio exitosamente', async () => {
       axiosPostSpy.mockResolvedValueOnce({ data: { ok: true } });
-      const result = await WhatsAppService.sendAppointmentReminder(to, customerName, date, time);
+      const result = await WhatsAppService.sendAppointmentReminder(to, customerName, 'Mi Negocio', 'Corte', date, time, 'http://localhost/appointments/123');
       expect(result).toBeDefined();
       expect(axiosPostSpy).toHaveBeenCalled();
     });
@@ -40,7 +40,7 @@ describe('WhatsAppService', () => {
 
       let error;
       try {
-        await WhatsAppService.sendAppointmentReminder(to, customerName, date, time);
+        await WhatsAppService.sendAppointmentReminder(to, customerName, 'Mi Negocio', 'Corte', date, time, 'http://localhost/appointments/123');
       } catch (e) {
         error = e;
       }
@@ -53,7 +53,7 @@ describe('WhatsAppService', () => {
   describe('sendAppointmentConfirmation', () => {
     it('debería enviar confirmación (fire and forget)', async () => {
       axiosPostSpy.mockResolvedValueOnce({ data: {} });
-      await WhatsAppService.sendAppointmentConfirmation(to, customerName, 'Corte', date, time);
+      await WhatsAppService.sendAppointmentConfirmation(to, customerName, 'Mi Negocio', 'Corte', date, time, 'http://localhost/appointments/123');
       expect(axiosPostSpy).toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalled();
     });
@@ -61,7 +61,7 @@ describe('WhatsAppService', () => {
     it('debería registrar error pero NO lanzar excepción', async () => {
       axiosPostSpy.mockRejectedValueOnce(new Error('Network Error'));
       // No debe lanzar
-      await WhatsAppService.sendAppointmentConfirmation(to, customerName, 'Corte', date, time);
+      await WhatsAppService.sendAppointmentConfirmation(to, customerName, 'Mi Negocio', 'Corte', date, time, 'http://localhost/appointments/123');
       expect(logger.error).toHaveBeenCalled();
     });
   });

@@ -137,7 +137,7 @@ export const AppointmentService = {
     await validateNotHoliday(userId, data.fecha);
 
     // 3. Verificar horario comercial y break time
-    const settings = await getBusinessSettings(userId);
+    const settings = await getBusinessSettings(userId, data.fecha);
     if (settings) {
       const dateObj = new Date(`${data.fecha}T00:00:00`);
       const dbDay = JS_TO_DB_DAY[dateObj.getDay()];
@@ -164,7 +164,7 @@ export const AppointmentService = {
       trabajador?: string;
     },
   ): Promise<void> {
-    const settings = await getBusinessSettings(userId);
+    const settings = await getBusinessSettings(userId, data.fecha);
     if (!settings) return;
 
     const staffList = data.trabajador ? await listStaff(userId) : [];

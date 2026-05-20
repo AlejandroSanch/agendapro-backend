@@ -22,8 +22,10 @@ export const OnboardingController = {
   getStatus: asyncWrapper(async (req: Request, res: Response) => {
     const user = getAuthUser(req);
 
+    const date = req.query.date as string | undefined;
+
     const completed = await getOnboardingStatus(user.id);
-    const settings = await getBusinessSettings(user.id);
+    const settings = await getBusinessSettings(user.id, date);
 
     res.json({ completed, settings, user });
   }),

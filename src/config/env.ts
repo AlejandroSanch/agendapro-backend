@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
+import path from 'path';
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 function parsePort(rawValue: string | undefined, fallback: number): number {
   const parsed = Number(rawValue);

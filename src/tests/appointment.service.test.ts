@@ -45,7 +45,7 @@ describe('AppointmentService', () => {
       (isHolidayClosure as jest.Mock).mockResolvedValue(false);
 
       // 2026-05-11 es Lunes. JS getDay() = 1. JS_TO_DB_DAY[1] = 0.
-      const monday = '2026-05-11';
+      const monday = '2030-05-13';
 
       (getBusinessSettings as jest.Mock).mockResolvedValue({
         schedules: [{ day: 0, open: false, from: '09:00', to: '18:00' }],
@@ -63,7 +63,7 @@ describe('AppointmentService', () => {
     it('debería lanzar error si la cita excede el horario de cierre', async () => {
       (isHolidayClosure as jest.Mock).mockResolvedValue(false);
 
-      const monday = '2026-05-11';
+      const monday = '2030-05-13';
 
       (getBusinessSettings as jest.Mock).mockResolvedValue({
         schedules: [{ day: 0, open: true, from: '09:00', to: '18:00' }],
@@ -81,7 +81,7 @@ describe('AppointmentService', () => {
     it('debería lanzar error si la cita inicia antes del horario de apertura', async () => {
       (isHolidayClosure as jest.Mock).mockResolvedValue(false);
 
-      const monday = '2026-05-11';
+      const monday = '2030-05-13';
 
       (getBusinessSettings as jest.Mock).mockResolvedValue({
         schedules: [{ day: 0, open: true, from: '09:00', to: '18:00' }],
@@ -99,7 +99,7 @@ describe('AppointmentService', () => {
     it('debería lanzar error si la cita se solapa con el break del negocio', async () => {
       (isHolidayClosure as jest.Mock).mockResolvedValue(false);
 
-      const monday = '2026-05-11';
+      const monday = '2030-05-13';
 
       (getBusinessSettings as jest.Mock).mockResolvedValue({
         breakEnabled: true,
@@ -120,7 +120,7 @@ describe('AppointmentService', () => {
     it('debería lanzar error si la cita se solapa con el break propio del trabajador', async () => {
       (isHolidayClosure as jest.Mock).mockResolvedValue(false);
 
-      const monday = '2026-05-11';
+      const monday = '2030-05-13';
 
       (getBusinessSettings as jest.Mock).mockResolvedValue({
         breakEnabled: true,
@@ -152,7 +152,7 @@ describe('AppointmentService', () => {
     it('debería pasar todas las validaciones con datos correctos', async () => {
       (isHolidayClosure as jest.Mock).mockResolvedValue(false);
 
-      const monday = '2026-05-11';
+      const monday = '2030-05-13';
 
       (getBusinessSettings as jest.Mock).mockResolvedValue({
         breakEnabled: true,
