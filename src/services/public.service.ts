@@ -67,16 +67,28 @@ export const PublicService = {
   },
 
   /**
-   * Confirms an appointment and sends a system notification to the tenant.
+   * Confirma an appointment and sends a system notification to the tenant.
    */
   async confirmAppointment(
     appointmentId: string,
+    token?: string,
     source: 'web' | 'email' = 'web',
   ): Promise<string> {
     const foundTenant = await this.resolveTenantForAppointment(appointmentId);
     if (!foundTenant) throw new ApiError(404, 'Cita no encontrada.');
 
     const db = getControlPool();
+    
+    // Verify Token
+    const [rows] = await db.query<RowDataPacket[]>(
+      `SELECT confirmation_token FROM ${q(foundTenant)}.appointments WHERE id = ? LIMIT 1`,
+      [appointmentId]
+    );
+
+    if (!rows[0] || (rows[0].confirmation_token !== null && rows[0].confirmation_token !== token)) {
+       throw new ApiError(400, 'El enlace de confirmación es inválido o expirado.');
+    }
+
     await db.query(
       `UPDATE ${q(foundTenant)}.appointments SET status = 'confirmed', updated_at = NOW() WHERE id = ?`,
       [appointmentId],
@@ -110,7 +122,7 @@ export const PublicService = {
   /**
    * Fetches public details for an appointment.
    */
-  async getAppointmentDetails(appointmentId: string): Promise<PublicAppointmentDetails> {
+  async getAppointmentDetails(appointmentId: string, token?: string): Promise<PublicAppointmentDetails> {
     const foundTenant = await this.resolveTenantForAppointment(appointmentId);
     if (!foundTenant) throw new ApiError(404, 'Cita no encontrada.');
 
@@ -120,6 +132,7 @@ export const PublicService = {
         a.id, 
         a.start_at, 
         a.service_name,
+        a.confirmation_token,
         c.first_name AS customer_name,
         s.name AS service_name_ref,
         st.first_name AS specialist_name,
@@ -136,7 +149,9 @@ export const PublicService = {
       [appointmentId],
     );
 
-    if (!rows[0]) throw new ApiError(404, 'Cita no encontrada.');
+    if (!rows[0] || (rows[0].confirmation_token !== null && rows[0].confirmation_token !== token)) {
+      throw new ApiError(404, 'Cita no encontrada o token inválido.');
+    }
 
     const apt = rows[0];
 

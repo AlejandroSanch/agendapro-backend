@@ -14,17 +14,24 @@ export interface AppointmentConfirmationParams {
   confirmLink: string;
 }
 
+function escapeHtml(unsafe: string): string {
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 export function buildAppointmentConfirmationHtml(params: AppointmentConfirmationParams): string {
-  const {
-    customerName,
-    businessName,
-    serviceName,
-    specialistName,
-    dateFormatted,
-    timeFormatted,
-    businessAddress,
-    confirmLink,
-  } = params;
+  const customerName = escapeHtml(params.customerName);
+  const businessName = escapeHtml(params.businessName);
+  const serviceName = escapeHtml(params.serviceName);
+  const specialistName = escapeHtml(params.specialistName);
+  const dateFormatted = escapeHtml(params.dateFormatted);
+  const timeFormatted = escapeHtml(params.timeFormatted);
+  const businessAddress = escapeHtml(params.businessAddress);
+  const confirmLink = params.confirmLink; // Link usually generated safely by the backend
   const year = new Date().getFullYear();
 
   return `

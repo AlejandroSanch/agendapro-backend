@@ -1,5 +1,6 @@
 import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { ModuleId, PlanId, UserPublic, UserRecord } from '../../types';
+import crypto from 'crypto';
 import { getControlPool } from '../db';
 import {
   generateEmailVerificationToken,
@@ -212,6 +213,7 @@ export async function setPasswordResetToken(
   if (!row) return null;
 
   const token = generateEmailVerificationToken();
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   const expires = new Date(Date.now() + 60 * 60 * 1000) // 1 hour
     .toISOString()
     .slice(0, 19)
@@ -219,7 +221,7 @@ export async function setPasswordResetToken(
 
   await db.query(
     `UPDATE users SET password_reset_token = ?, password_reset_expires = ?, updated_at = NOW() WHERE id = ?`,
-    [token, expires, row.id],
+    [tokenHash, expires, row.id],
   );
 
   return { token, userName: row.name };
@@ -233,9 +235,11 @@ export async function resetPasswordByToken(
   const normalizedToken = String(token || '').trim();
   if (!normalizedToken || !newPassword) return false;
 
+  const tokenHash = crypto.createHash('sha256').update(normalizedToken).digest('hex');
+
   const [rows] = await db.query<UserRow[]>(
     `SELECT id, password_reset_expires FROM users WHERE password_reset_token = ? LIMIT 1`,
-    [normalizedToken],
+    [tokenHash],
   );
 
   const row = rows[0];

@@ -32,7 +32,18 @@ import { logger } from './utils/logger';
 export const app = express();
 
 // Seguridad de Cabeceras HTTP
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+  })
+);
 
 app.use(
   cors({

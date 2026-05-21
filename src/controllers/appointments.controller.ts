@@ -146,7 +146,7 @@ export const AppointmentsController = {
       const settings = await getBusinessSettings(user.id);
       const bizName = (settings as any)?.businessName || (user as any).businessName || 'AgendaPro Business';
       const bizAddress = settings?.address || 'Dirección por confirmar';
-      const confirmLink = `${process.env.API_BASE_URL || 'http://localhost:4000'}/api/public/appointments/${apiAppointment.id}/confirm`;
+      const confirmLink = `${process.env.API_BASE_URL || 'http://localhost:4000'}/api/public/appointments/${apiAppointment.id}/confirm${appointment.confirmationToken ? `?token=${appointment.confirmationToken}` : ''}`;
 
       // Enviar correo de confirmación si hay email configurado
       const db = getControlPool();

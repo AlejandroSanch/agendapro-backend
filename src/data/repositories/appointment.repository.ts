@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import crypto, { randomUUID } from 'crypto';
 import { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { getControlPool } from '../db';
 import {
@@ -23,6 +23,7 @@ export interface AppointmentRecord {
   time: string;
   notes: string;
   status: AppointmentStatusDb;
+  confirmationToken?: string | null;
   trabajador: string;
 }
 
@@ -44,6 +45,7 @@ export type UpdateAppointmentInput = Partial<UpsertAppointmentInput>;
 interface AppointmentJoinedRow extends RowDataPacket {
   id: string;
   status: AppointmentStatusDb;
+  confirmation_token: string | null;
   start_at: string;
   notes: string | null;
   customer_name: string;
@@ -101,7 +103,7 @@ export async function listAppointments(
   const [rows] = await db.query<AppointmentJoinedRow[]>(
     `
       SELECT
-        a.id, a.status, DATE_FORMAT(a.start_at, '%Y-%m-%d %H:%i:%s') AS start_at, a.notes,
+        a.id, a.status, a.confirmation_token, DATE_FORMAT(a.start_at, '%Y-%m-%d %H:%i:%s') AS start_at, a.notes,
         CONCAT(c.first_name, ' ', c.last_name) AS customer_name, c.phone AS customer_phone,
         COALESCE(s.name, a.service_name) AS service_name, s.duration_minutes AS service_duration_minutes, s.price_cents AS service_price_cents,
         CONCAT(st.first_name, ' ', st.last_name) AS staff_name
@@ -210,17 +212,20 @@ export async function createAppointment(
       }
     }
 
+    const confirmationToken = crypto.randomBytes(32).toString('hex');
+
     const [result] = await connection.query<ResultSetHeader>(
       `
         INSERT INTO ${q(tenantDbName)}.appointments (
-          customer_id, service_name, status, start_at, end_at, notes, created_at, updated_at
+          customer_id, service_name, status, confirmation_token, start_at, end_at, notes, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
       `,
       [
         customerId,
         normalized.serviceName,
         normalized.status,
+        confirmationToken,
         startAt,
         endAt,
         normalized.notes || null,
@@ -405,7 +410,7 @@ async function getAppointmentById(
   const [rows] = await db.query<AppointmentJoinedRow[]>(
     `
       SELECT
-        a.id, a.status, DATE_FORMAT(a.start_at, '%Y-%m-%d %H:%i:%s') AS start_at, a.notes,
+        a.id, a.status, a.confirmation_token, DATE_FORMAT(a.start_at, '%Y-%m-%d %H:%i:%s') AS start_at, a.notes,
         CONCAT(c.first_name, ' ', c.last_name) AS customer_name, c.phone AS customer_phone,
         COALESCE(s.name, a.service_name) AS service_name, s.duration_minutes AS service_duration_minutes, s.price_cents AS service_price_cents,
         CONCAT(st.first_name, ' ', st.last_name) AS staff_name
@@ -537,6 +542,7 @@ function toAppointmentRecord(row: AppointmentJoinedRow): AppointmentRecord {
     time,
     notes: row.notes ?? '',
     status: normalizeAppointmentStatus(row.status),
+    confirmationToken: row.confirmation_token,
     trabajador: row.staff_name ?? '',
   };
 }
