@@ -214,6 +214,22 @@ export async function createAppointment(
 
     const confirmationToken = crypto.randomBytes(32).toString('hex');
 
+    // ── Nivel de Aislamiento: Bloquear el registro del trabajador ──
+    // Serializa el acceso para evitar concurrencia de reservas sobre el mismo especialista.
+    if (staffId) {
+      await connection.query(
+        `SELECT id FROM ${q(tenantDbName)}.staff WHERE id = ? FOR UPDATE`,
+        [staffId]
+      );
+
+      const staffOverlap = await getStaffOverlap(connection, tenantDbName, staffId, startAt, endAt);
+      if (staffOverlap) {
+        throw new Error(
+          `El especialista seleccionado ya tiene una cita ocupando este horario ("${staffOverlap.serviceName}" a las ${staffOverlap.time}).`
+        );
+      }
+    }
+
     const [result] = await connection.query<ResultSetHeader>(
       `
         INSERT INTO ${q(tenantDbName)}.appointments (
@@ -332,24 +348,7 @@ export async function updateAppointment(
       );
     }
 
-    const [result] = await connection.query<ResultSetHeader>(
-      `
-        UPDATE ${q(tenantDbName)}.appointments
-        SET customer_id = ?, service_name = ?, status = ?, start_at = ?, end_at = ?, notes = ?, updated_at = NOW()
-        WHERE id = ?
-      `,
-      [
-        customerId,
-        merged.serviceName,
-        merged.status,
-        startAt,
-        endAt,
-        merged.notes || null,
-        appointmentId,
-      ],
-    );
-
-    // Update pivot
+    // Resolver el trabajador (Update pivot data later)
     let staffId: string | null = null;
     if (merged.trabajador) {
       const normalizedStaffName = merged.trabajador.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -377,6 +376,47 @@ export async function updateAppointment(
         staffId = staffRows[0]?.id ? String(staffRows[0].id) : '1';
       }
     }
+
+    if (staffId) {
+      // Bloquear al especialista para evitar condición de carrera en edición
+      await connection.query(
+        `SELECT id FROM ${q(tenantDbName)}.staff WHERE id = ? FOR UPDATE`,
+        [staffId]
+      );
+
+      const staffOverlap = await getStaffOverlap(
+        connection,
+        tenantDbName,
+        staffId,
+        startAt,
+        endAt,
+        appointmentId,
+      );
+      if (staffOverlap) {
+        throw new Error(
+          `El especialista seleccionado ya tiene una cita ocupando este horario ("${staffOverlap.serviceName}" a las ${staffOverlap.time}).`
+        );
+      }
+    }
+
+    const [result] = await connection.query<ResultSetHeader>(
+      `
+        UPDATE ${q(tenantDbName)}.appointments
+        SET customer_id = ?, service_name = ?, status = ?, start_at = ?, end_at = ?, notes = ?, updated_at = NOW()
+        WHERE id = ?
+      `,
+      [
+        customerId,
+        merged.serviceName,
+        merged.status,
+        startAt,
+        endAt,
+        merged.notes || null,
+        appointmentId,
+      ],
+    );
+
+    // Update pivot
 
     await connection.query(
       `DELETE FROM ${q(tenantDbName)}.appointment_services WHERE appointment_id = ?`,
@@ -573,6 +613,48 @@ async function getCustomerOverlap(
       SELECT s.name as service_name, DATE_FORMAT(a.start_at, '%H:%i') as start_time
       FROM ${q(tenantDbName)}.appointments a
       LEFT JOIN ${q(tenantDbName)}.appointment_services aserv ON aserv.appointment_id = a.id
+      LEFT JOIN ${q(tenantDbName)}.services s ON s.id = aserv.service_id
+      WHERE ${whereParts.join(' AND ')}
+      LIMIT 1
+    `,
+    params,
+  );
+
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    serviceName: row.service_name || 'Servicio desconocido',
+    time: row.start_time,
+  };
+}
+
+async function getStaffOverlap(
+  connection: PoolConnection,
+  tenantDbName: string,
+  staffId: string,
+  startAt: string,
+  endAt: string,
+  excludeAppointmentId?: string,
+): Promise<{ serviceName: string; time: string } | null> {
+  const whereParts = [
+    'aserv.staff_id = ?',
+    'a.start_at < ?',
+    'a.end_at > ?',
+    "a.status NOT IN ('cancelled', 'no_show')",
+  ];
+  const params = [staffId, endAt, startAt];
+
+  if (excludeAppointmentId) {
+    whereParts.push('a.id != ?');
+    params.push(excludeAppointmentId);
+  }
+
+  const [rows] = await connection.query<any[]>(
+    `
+      SELECT s.name as service_name, DATE_FORMAT(a.start_at, '%H:%i') as start_time
+      FROM ${q(tenantDbName)}.appointments a
+      INNER JOIN ${q(tenantDbName)}.appointment_services aserv ON aserv.appointment_id = a.id
       LEFT JOIN ${q(tenantDbName)}.services s ON s.id = aserv.service_id
       WHERE ${whereParts.join(' AND ')}
       LIMIT 1

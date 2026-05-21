@@ -1,0 +1,59 @@
+config:
+  # URL base de tu backend local o en producción
+  target: "http://localhost:4000"
+  
+  # Fases de la prueba de estrés
+  phases:
+    - duration: 10          # Duración en segundos
+      arrivalRate: 5        # Cuántos usuarios nuevos llegan cada segundo
+      name: "Calentamiento suave"
+      
+    - duration: 20
+      arrivalRate: 10
+      rampTo: 50            # Aumentar gradualmente hasta 50 usuarios por segundo
+      name: "Rampa de estrés"
+      
+    - duration: 15
+      arrivalRate: 50       # Mantener la carga alta de 50 usuarios por segundo
+      name: "Pico de tráfico (Estrés Alto)"
+
+  # Plugins (opcional, sirve para ver métricas bonitas en la consola)
+  plugins:
+    metrics-by-endpoint: {}
+
+scenarios:
+  - name: "Flujo de Autenticación y Lectura de Datos"
+    flow:
+      # 1. El usuario intenta iniciar sesión
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "demo@agendapro.com"       # CAMBIA ESTO por un email válido de tu BD
+            password: "demo123"               # CAMBIA ESTO por la contraseña válida
+          capture:
+            - json: "$.accessToken"           # Capturar el token de la respuesta JSON
+              as: "token"
+              
+      # Pausa humana (simulando que la interfaz de la web carga)
+      - think: 1
+      
+      # 2. El usuario ya autenticado pide su perfil
+      - get:
+          url: "/api/auth/me"
+          headers:
+            Authorization: "Bearer {{ token }}"
+            
+      # Pausa humana
+      - think: 2
+
+      # 3. El usuario intenta cargar su lista de citas
+      - get:
+          url: "/api/appointments"
+          headers:
+            Authorization: "Bearer {{ token }}"
+            
+      # 4. El usuario carga la lista de clientes (concurrencia de consultas pesadas)
+      - get:
+          url: "/api/customers"
+          headers:
+            Authorization: "Bearer {{ token }}"

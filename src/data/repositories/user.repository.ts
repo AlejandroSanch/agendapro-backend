@@ -98,26 +98,31 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord | n
   const avatarInitials = initialsFromName(name);
   const emailVerificationToken = generateEmailVerificationToken();
 
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const userId = await nextSequentialId(db, 'users', 'user');
-    const tenantDbName = tenantDbNameFromUserId(userId);
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    const user: UserRecord = {
-      id: userId,
-      name,
-      email,
-      password: passwordHash,
-      emailVerified: false,
-      emailVerificationToken,
-      termsAcceptedAt: new Date().toISOString(),
-      plan: normalizedPlan,
-      businessName,
-      avatarInitials,
-      moduleOverrides: {},
-    };
-
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const connection = await db.getConnection();
     try {
-      await db.query(
+      await connection.beginTransaction();
+      
+      const userId = await nextSequentialId(connection, 'users', 'user');
+      const tenantDbName = tenantDbNameFromUserId(userId);
+
+      const user: UserRecord = {
+        id: userId,
+        name,
+        email,
+        password: passwordHash,
+        emailVerified: false,
+        emailVerificationToken,
+        termsAcceptedAt: new Date().toISOString(),
+        plan: normalizedPlan,
+        businessName,
+        avatarInitials,
+        moduleOverrides: {},
+      };
+
+      await connection.query(
         `
           INSERT INTO users (
             id, name, email, password, email_verified, email_verification_token, terms_accepted_at, plan, business_name, avatar_initials, tenant_db_name, created_at, updated_at
@@ -138,12 +143,21 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord | n
         ],
       );
 
+      await connection.commit();
+      connection.release();
+
       await ensureTenantSchema(tenantDbName);
       return user;
     } catch (error) {
+      await connection.rollback();
+      connection.release();
+
       if (!isDuplicateKeyError(error)) throw error;
       if (isUsersEmailDuplicateError(error)) return null;
-      if (isPrimaryKeyDuplicateError(error)) continue;
+      if (isPrimaryKeyDuplicateError(error)) {
+        await sleep(Math.floor(Math.random() * 500) + 100);
+        continue;
+      }
       throw error;
     }
   }

@@ -10,7 +10,7 @@ export const loginSchema = z.object({
 
 export const registerSchema = z.object({
   email: z.string().email('Correo electrónico inválido.').max(255),
-  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.').max(100).regex(/^(?=.*[A-Za-z])(?=.*\\d).*$/, 'La contraseña debe contener al menos una letra y un número.'),
+  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.').max(100).regex(/^(?=.*[A-Za-z])(?=.*\d).*$/, 'La contraseña debe contener al menos una letra y un número.'),
   name: z.string().min(2, 'El nombre es requerido.').max(255),
   businessName: z.string().min(2, 'El nombre del negocio es requerido.').max(255),
   acceptTerms: z
@@ -40,5 +40,5 @@ export const forgotPasswordSchema = z.object({
 
 export const resetPasswordSchema = z.object({
   token: z.string().min(1, 'Token de restablecimiento requerido.'),
-  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.').max(100).regex(/^(?=.*[A-Za-z])(?=.*\\d).*$/, 'La contraseña debe contener al menos una letra y un número.'),
+  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.').max(100).regex(/^(?=.*[A-Za-z])(?=.*\d).*$/, 'La contraseña debe contener al menos una letra y un número.'),
 });
